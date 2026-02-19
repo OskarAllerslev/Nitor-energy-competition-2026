@@ -12,6 +12,8 @@ mean_guess <- mean(training_data$target)
 
 
 
+
+
 test_data <- load_nitor_test_data()
 View(test_data)
 

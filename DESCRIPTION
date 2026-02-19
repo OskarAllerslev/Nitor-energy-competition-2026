@@ -9,3 +9,27 @@ License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Imports: 
+    dplyr,
+    readr, 
+    readr,
+    dplyr, 
+    tidymodels,
+    lubridate,
+    tidyr, 
+    rsample,
+    recipes, 
+    parsnip, 
+    workflows, 
+    tune,
+    doParallel,
+    yardstick,
+    xgboost,
+    progressr,
+    ggplot2,
+    embed,
+    dials,
+    finetune,
+    modeltime,
+    TTR,
+    vip
