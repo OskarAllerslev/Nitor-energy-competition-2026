@@ -18,3 +18,12 @@ View(test_data)
 guess <- data.frame(id = test_data$id, target = mean_guess)
 View(guess)
 
+write.csv(guess, "./inst/eksempel_model/resultater/gennemsnit.csv", row.names = FALSE)
+
+
+
+
+
+View(training_data)
+
+
