@@ -48,7 +48,7 @@ folds <- rsample::sliding_period(
 library(KFAS)
 train_df_engineered <- train_df# |>
   # dplyr::mutate(
-  # ) |> 
+  # ) |>
   # dplyr::select(-wind_direction_80m, -wind_dir_rad)
 
 
@@ -68,10 +68,10 @@ recipes::step_mutate(
     # wind_dir_rad = wind_direction_80m * (pi / 180),
     wind_dir_sin = sin(wind_direction_80m * (pi /180)),
     wind_dir_cos = cos(wind_direction_80m * (pi /180)),
-    residual_load = load_forecast - solar_forecast - wind_forecast, 
+    residual_load = load_forecast - solar_forecast - wind_forecast,
     temp_index = pmax(0, wet_bulb_temperature_2m - 22) + pmax(0, 18 - air_temperature_2m)
-)  |> 
-  recipes::step_rm(wind_direction_80m )  |> 
+)  |>
+  recipes::step_rm(wind_direction_80m )  |>
 recipes::step_dummy(market, one_hot = TRUE) |>
 recipes::step_date(
   delivery_start,
@@ -150,10 +150,10 @@ xgb_spec <- parsnip::boost_tree(
   learn_rate = tune::tune()
 )  |>
   parsnip::set_engine(
-    "xgboost",
-    nthread =3 
-    # tree_method = "hist",
-    # device = "cuda"
+    "xgboost"#,
+   #nthread =15
+    #tree_method = "gpu_hist",
+   # device = "cuda"
  )  |>
   parsnip::set_mode("regression")
 
@@ -171,7 +171,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size = 30
+  size = 5
 )
 
 
@@ -202,7 +202,7 @@ xgb_tune_res <- tune::tune_grid(
 )
 
 
-# parallel::stopCluster(cl)
+parallel::stopCluster(cl)
 
 
 # se på de bedste hyperparametre ----
@@ -212,4 +212,7 @@ best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
 
 best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
+saveRDS(best_params, file = "./inst/torsdag_aften/model/best_params.rds")
+saveRDS(best_xgb_params, file = "./inst/torsdag_aften/model/best_xgb_params.rds")
 
+df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
