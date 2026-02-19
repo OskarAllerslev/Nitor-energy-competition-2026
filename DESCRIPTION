@@ -31,4 +31,5 @@ Imports:
     modeltime,
     TTR,
     vip,
+    corrr,
     glue

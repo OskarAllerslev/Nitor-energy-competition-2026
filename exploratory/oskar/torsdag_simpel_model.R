@@ -37,6 +37,14 @@ fold1_test <- rsample::assessment(fold1)
 # feature engineering ----
 # dokumenter godt hvad der sker 
 
+dplyr::glimpse(train_df)
+# lav nok en residual load på load_forcast, load - (wind + solar)?
+# wind direction skal lave til cos / sin
+# wind speed ?
+
+x <- corrr::correlate(train_df)
+corrr::rplot(x)
+
 
 
 
