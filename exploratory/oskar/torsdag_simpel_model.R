@@ -184,8 +184,8 @@ ctrl <- tune::control_grid(
 )
 
 set.seed(1)
-options(future.globals.maxSize = Inf)
-future::plan(future::multisession, workers=15)
+# options(future.globals.maxSize = Inf)
+future::plan(future::sequential)
 # cores <- parallel::detectCores() - 1
 # cl <- parallel::makePSOCKcluster(cores)
 # doParallel::registerDoParallel(cl)
