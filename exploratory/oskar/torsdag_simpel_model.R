@@ -151,23 +151,49 @@ xgb_spec <- parsnip::boost_tree(
 
 # workflow ----
 xgb_wf <- workflows::workflow()  |> 
-  workflows::add_recipe()  |> 
+  workflows::add_recipe(initial_recipe)  |> 
   workflows::add_model(xgb_spec)
 
 # parameterrum ----
 
-xgb_hyper_space <- dials::grid_regular(
-  dials::trees(range = c(1L, 2000L)) , 
-  dials::tree_depth(range = c(1L, 100L)),
-  dials::min_n(range = c())
+xgb_hyper_space <- dials::grid_latin_hypercube(
+  dials::trees(range = c(500L, 2000L)),
+  dials::tree_depth(range = c(3L, 9L)),
+  dials::min_n(range = c(15L, 100L)),
+  dials::mtry(range = c(10L, 35L)),
+  dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
+  size = 30
 )
 
-
-# brug dials
 
 # fit model ----
 
 
+eval_metric <- yardstick::metric_set(yardstick::rmse)
+
+
+ctrl <- tune::control_grid(
+  save_pred = T, 
+  verbose = T, 
+  allow_par = T
+)
+
+set.seed(1)
+xgb_tune_res <- tune::tune_grid(
+  object = xgb_wf, 
+  resamples = folds, 
+  grid = xgb_hyper_space, 
+  metrics = eval_metric, 
+  control = ctrl
+)
+
+
+
 # se på de bedste hyperparametre ----
+
+
+best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
+
+best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
 
