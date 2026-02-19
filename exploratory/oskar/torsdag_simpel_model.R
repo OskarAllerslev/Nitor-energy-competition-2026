@@ -42,9 +42,12 @@ dplyr::glimpse(train_df)
 # wind direction skal lave til cos / sin
 # wind speed ?
 
-x <- corrr::correlate(train_df)
-corrr::rplot(x)
-
+x <- cor(train_df)
+corrplot::corrplot(
+  x, 
+  type = "upper", 
+  order = "hclust"
+)
 
 
 
