@@ -146,7 +146,8 @@ xgb_spec <- parsnip::boost_tree(
   learn_rate = tune::tune()
 )  |>
   parsnip::set_engine(
-    "xgboost"
+    "xgboost",
+    nthread = 15
     # tree_method = "hist",
     # device = "cuda"
  )  |>
@@ -179,13 +180,15 @@ eval_metric <- yardstick::metric_set(yardstick::rmse)
 ctrl <- tune::control_grid(
   save_pred = T,
   verbose = T,
-  allow_par = T
+  allow_par = F
 )
 
 set.seed(1)
-cores <- parallel::detectCores() - 1
-cl <- parallel::makePSOCKcluster(cores)
-doParallel::registerDoParallel(cl)
+options(future.globals.maxSize = Inf)
+future::plan(future::multisession, workers=15)
+# cores <- parallel::detectCores() - 1
+# cl <- parallel::makePSOCKcluster(cores)
+# doParallel::registerDoParallel(cl)
 xgb_tune_res <- tune::tune_grid(
   object = xgb_wf,
   resamples = folds,
@@ -195,7 +198,7 @@ xgb_tune_res <- tune::tune_grid(
 )
 
 
-
+# parallel::stopCluster(cl)
 
 
 # se på de bedste hyperparametre ----
