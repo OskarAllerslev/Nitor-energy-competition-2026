@@ -146,9 +146,9 @@ xgb_spec <- parsnip::boost_tree(
   learn_rate = tune::tune()
 )  |>
   parsnip::set_engine(
-    "xgboost",
-    tree_method = "hist",
-    device = "cuda"
+    "xgboost"
+    # tree_method = "hist",
+    # device = "cuda"
  )  |>
   parsnip::set_mode("regression")
 
@@ -178,11 +178,14 @@ eval_metric <- yardstick::metric_set(yardstick::rmse)
 
 ctrl <- tune::control_grid(
   save_pred = T,
-  verbose = T#,
-  #allow_par = T
+  verbose = T,
+  allow_par = T
 )
 
 set.seed(1)
+cores <- parallel::detectCores() - 1
+cl <- parallel::makePSOCKcluster(cores)
+doParallel::registerDoParallel(cl)
 xgb_tune_res <- tune::tune_grid(
   object = xgb_wf,
   resamples = folds,
@@ -190,6 +193,8 @@ xgb_tune_res <- tune::tune_grid(
   metrics = eval_metric,
   control = ctrl
 )
+
+
 
 
 
