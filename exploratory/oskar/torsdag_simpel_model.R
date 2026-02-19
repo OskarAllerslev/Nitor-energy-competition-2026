@@ -24,7 +24,8 @@ folds <- rsample::sliding_period(
   period = "day",
   lookback = 28,
   assess_stop = 1,
-  step = 1
+  step = 30, #sæt til 1
+  skip = 27
 )
 
 # tjekker lige hvad der er i folds
@@ -44,20 +45,20 @@ folds <- rsample::sliding_period(
 # wind speed ?
 
 
-train_df_engineered <-
-  train_df |>
+library(KFAS)
+train_df_engineered <- train_df |>
   dplyr::mutate(
-    #market = factor(market),
-    wind_speed_80m = wind_speed_80m^3#,
-    #delivery_start = lubridate::ymd_hms(delivery_start)#,
-    # hour_of_day_start = lubridate::hour(delivery_start ),
-    # hour_sin_start = sin(2 * pi * hour_of_day_start  / 24),
-    # hour_cos_start = cos(2 * pi * hour_of_day_start  / 24),
-    # delivery_end = lubridate::ymd_hms(delivery_end),
-    # hour_of_day_end = lubridate::hour(delivery_end),
-    # hour_sin_end = sin(2 * pi * hour_of_day_end / 24),
-    # hour_cos_end = cos(2 * pi * hour_of_day_end / 24)
-    )
+    wind_speed_80m = wind_speed_80m^3,
+    target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
+    wind_dir_rad = wind_direction_80m * (pi / 180),
+    wind_dir_sin = sin(wind_direction_80m),
+    wind_dir_cos = cos(wind_direction_80m),
+    residual_load = load_forecast - solar_forecast - wind_forecast, 
+    temp_index = pmax(0, wet_bulb_temperature_2m - 22) + pmax(0, 18 - air_temperature_2m)
+  ) |> 
+  dplyr::select(-wind_direction_80m, -wind_dir_rad)
+
+
 
 
 # step harmonic sin(2pi * frek * x / cycle_size) samme med cos
@@ -95,9 +96,9 @@ recipes::step_harmonic( #harmonic på year
   frequency = 1,
   cycle_size = 365.25
 )  |> # normalize
-  recipes::step_mutate(
-    target = asinh((target - median(target, na.rm = T)) / stats::mad(target, na.rm = T) )
-  ) |>
+  # recipes::step_mutate(
+    # target = asinh((target - median(target, na.rm = T)) / stats::mad(target, na.rm = T) )
+  # ) |>
   recipes::step_rm(delivery_start) |>
   recipes::step_rm(delivery_end)
 
@@ -147,7 +148,7 @@ xgb_spec <- parsnip::boost_tree(
 )  |>
   parsnip::set_engine(
     "xgboost",
-    nthread = 15
+    nthread =3 
     # tree_method = "hist",
     # device = "cuda"
  )  |>
@@ -180,15 +181,15 @@ eval_metric <- yardstick::metric_set(yardstick::rmse)
 ctrl <- tune::control_grid(
   save_pred = T,
   verbose = T,
-  allow_par = F
+  allow_par = T
 )
 
 set.seed(1)
 # options(future.globals.maxSize = Inf)
-future::plan(future::sequential)
-# cores <- parallel::detectCores() - 1
-# cl <- parallel::makePSOCKcluster(cores)
-# doParallel::registerDoParallel(cl)
+# future::plan(future::sequential)
+cores <- parallel::detectCores() - 1
+cl <- parallel::makePSOCKcluster(cores)
+doParallel::registerDoParallel(cl)
 xgb_tune_res <- tune::tune_grid(
   object = xgb_wf,
   resamples = folds,
