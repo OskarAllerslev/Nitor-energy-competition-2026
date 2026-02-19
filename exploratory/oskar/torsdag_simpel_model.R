@@ -59,9 +59,110 @@ train_df_engineered <-
     )
 
 
+# step harmonic sin(2pi * frek * x / cycle_size) samme med cos
+# tilføj residual load
+
+initial_recipe <- recipes::recipe(
+  target ~ ., 
+  data = train_df_engineered
+)  |> 
+recipes::step_date(
+  delivery_start, 
+  features = c("dow", "month", "doy", "year"), 
+  label = FALSE, 
+  keep_original_cols = TRUE
+)  |> 
+recipes::step_time(
+  delivery_start, 
+  features = c("hour"),
+  keep_original_cols = TRUE
+)  |> 
+recipes::step_harmonic( #harmonic på ugedag
+  delivery_start_dow, 
+  frequency = 1, 
+  cycle_size = 7
+)  |> 
+recipes::step_harmonic( #harmonic på hour 
+  delivery_start_hour, 
+  frequency = 1, 
+  cycle_size =24 
+)  |> 
+recipes::step_harmonic( #harmonic på year 
+  delivery_start_doy, 
+  frequency = 1, 
+  cycle_size = 365.25
+)  |> # normalize
+  recipes::step_mutate(
+    target = asinh((target - median(target, na.rm = T)) / stats::mad(target, na.rm = T) )
+  )  
+
+## visualiser vores recipes ----
+
+prepped_recipe <- recipes::prep(
+  initial_recipe, 
+  training = train_df_engineered
+)
+
+transformed_train_data <- recipes::bake(
+  prepped_recipe, 
+  new_data = NULL
+)  
+
+
+# temp plots
+
+# ggplot2::ggplot(
+#   data = transformed_train_data , 
+#   mapping = ggplot2::aes(
+#     x = id, 
+#     # y = target_alt
+#     y = target
+#   )
+# ) + ggplot2::geom_line()
+
+# ggplot2::ggplot(
+#   data = transformed_train_data  |>  dplyr::filter(id < 120 ), 
+#   mapping = ggplot2::aes(
+#     x = id, 
+#   )
+# ) + ggplot2::geom_line(mapping = ggplot2::aes(y  = delivery_start_hour_cos_1)) +
+# ggplot2::geom_line(mapping = ggplot2::aes(y  = delivery_start_hour_sin_1)) 
+
+
 # opsætning af model xgb ----
+
+
+xgb_spec <- parsnip::boost_tree(
+  trees = tune::tune(), 
+  tree_depth = tune::tune(), 
+  min_n = tune::tune(), 
+  loss_reduction = 0.001, 
+  sample_size = 0.7, 
+  mtry = tune::tune(), 
+  learn_rate = tune::tune()
+)  |> 
+  parsnip::set_engine(
+    "xgboost",
+    tree_method = "cuda", 
+    device = "cuda:0"
+ )  |> 
+  parsnip::set_mode("regression")
+
+
 # workflow ----
+xgb_wf <- workflows::workflow()  |> 
+  workflows::add_recipe()  |> 
+  workflows::add_model(xgb_spec)
+
 # parameterrum ----
+
+xgb_hyper_space <- dials::grid_regular(
+  dials::trees(range = c(1L, 2000L)) , 
+  dials::tree_depth(range = c(1L, 100L)),
+  dials::min_n(range = c())
+)
+
+
 # brug dials
 
 # fit model ----
