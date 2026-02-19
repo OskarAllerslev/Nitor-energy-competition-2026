@@ -2,13 +2,45 @@
 # opsætning af data ----
 training_data <- load_full_dataset()
 
-# rsample::rolling_origin
+## tilføj kalman filter ----
+
+
+t_median <- median(training_data$target)
+t_mad <- stats::mad(training_data$target)
+
+library(KFAS)
+training_data_initial_transform <- training_data  |> 
+  dplyr::mutate(
+    target = asinh((target - t_median) / t_mad)#,
+    # kalman = {
+    #   y_vec <- as.numeric(target)
+    #   mod <- KFAS::SSModel(y_vec ~ SSMtrend(1, Q = list(matrix(NA))), H = matrix(NA))
+    #   fit <- KFAS::fitSSM(mod, inits = c(0, 0), method = "BFGS")$model
+    #   kfs_out <- KFAS::KFS(fit)
+    #   as.numeric(kfs_out$a[1:length(y_vec)])
+    # },
+    # garch_state = {
+    #   y_vec <- as.numeric(target) 
+    #   spec <- rugarch::ugarchspec(
+    #     variance.model = list(model = "sGARCH", garchOrder = c(1,1)),
+    #     mean.model = list(armaOrder = c(0,0))
+    #   )
+    #   garch_fit <- rugarch::ugarchfit(spec = spec, data = y_vec)
+    #   as.numeric(rugarch::sigma(garch_fit))
+    # }
+  )
+
+
+
+## rsample::rolling_origin ----
 
 set.seed(1)
 splits <- rsample::initial_time_split(
-  data = training_data,
+  data = training_data_initial_transform,
   prop = 0.85
 )
+
+
 
 
 train_df <- rsample::training(splits)
@@ -45,11 +77,11 @@ folds <- rsample::sliding_period(
 # wind speed ?
 
 
-library(KFAS)
-train_df_engineered <- train_df |>
-  dplyr::mutate(
-    target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
-  ) 
+# library(KFAS)
+# train_df_engineered <- train_df |>
+#   dplyr::mutate(
+#     target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
+#   ) 
 
 
 # step harmonic sin(2pi * frek * x / cycle_size) samme med cos
@@ -57,17 +89,31 @@ train_df_engineered <- train_df |>
 
 initial_recipe <- recipes::recipe(
   target ~ .,
-  data = train_df_engineered
+  # data = train_df_engineered
+  data = train_df 
 )  |>
 recipes::update_role(id, new_role = "ID") |>
 recipes::step_mutate(
     wind_speed_80m = wind_speed_80m^3,
-    # wind_dir_rad = wind_direction_80m * (pi / 180),
     wind_dir_sin = sin(wind_direction_80m * (pi /180)),
     wind_dir_cos = cos(wind_direction_80m * (pi /180)),
     residual_load = load_forecast - solar_forecast - wind_forecast,
-    temp_index = pmax(0, wet_bulb_temperature_2m - 22) + pmax(0, 18 - air_temperature_2m)
+    temp_index = pmax(0, wet_bulb_temperature_2m - 22) + pmax(0, 18 - air_temperature_2m),
+    convective_threat = convective_available_potential_energy * (1/ (convective_inhibition + 0.01)) * cloud_cover_high, 
+    icing_risk = dplyr::if_else(freezing_level_height < 150 & relative_humidity_2m > 90, 1,0)
 )  |>
+  # rolling stats
+recipes::step_window(
+  residual_load, 
+  size = 7, 
+  role = "predictor", 
+  statistic = "mean", 
+  names = "residual_load_ma_6h"
+)  |> 
+  recipes::step_lag(load_forecast, lag = 24)  |> 
+  recipes::step_mutate(
+    load_momentum = load_forecast - dplyr::lag(load_forecast, 3)
+  )  |> 
   recipes::step_rm(wind_direction_80m )  |>
 recipes::step_dummy(market, one_hot = TRUE) |>
 recipes::step_date(
@@ -95,18 +141,16 @@ recipes::step_harmonic( #harmonic på year
   delivery_start_doy,
   frequency = 1,
   cycle_size = 365.25
-)  |> # normalize
-  # recipes::step_mutate(
-    # target = asinh((target - median(target, na.rm = T)) / stats::mad(target, na.rm = T) )
-  # ) |>
+)  |> 
   recipes::step_rm(delivery_start) |>
-  recipes::step_rm(delivery_end)
+  recipes::step_naomit(recipes::all_predictors())  |> 
+  recipes::step_rm(delivery_end)  
 
 ## visualiser vores recipes ----
 
 prepped_recipe <- recipes::prep(
   initial_recipe,
-  training = train_df_engineered
+  training = train_df 
 )
 
 transformed_train_data <- recipes::bake(
@@ -115,6 +159,22 @@ transformed_train_data <- recipes::bake(
 )
 
 # temp plots
+
+# ggplot2::ggplot(
+#   data = transformed_train_data  |>  dplyr::filter(id < 2000), 
+#   mapping = ggplot2::aes(
+#     x = id ,
+#   )
+# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = garch_state), color = "red", size = 2) + 
+#    ggplot2::geom_line(mapping = ggplot2::aes(y  = target), color = "black", alpha = 0.5)
+
+# ggplot2::ggplot(
+#   data = transformed_train_data  |>  dplyr::filter(id < 500), 
+#   mapping = ggplot2::aes(
+#     x = id ,
+#   )
+# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = kalman), color = "red", size = 2) + 
+#    ggplot2::geom_line(mapping = ggplot2::aes(y  = target), color = "black", alpha = 0.5)
 
 # ggplot2::ggplot(
 #   data = transformed_train_data ,
@@ -222,19 +282,49 @@ final_xgb_wf <- xgb_wf  |>
 
 
 # test og trainingdaten
-test_data_f <- load_nitor_test_data()
+# test_data_f <- load_nitor_test_data()  |> 
+#   dplyr::mutate(
+
+#   )
 training_data_f <- load_full_dataset()
-training_data_f_transformed <- training_data_f  |> 
+training_data_f_transformed <- training_data_f    |> 
   dplyr::mutate(
-    target = asinh((target - t_median) / t_mad)
+    target = asinh((target - t_median) / t_mad)#,
+    # kalman = {
+    #   y_vec <- as.numeric(target)
+    #   mod <- KFAS::SSModel(y_vec ~ SSMtrend(1, Q = list(matrix(NA))), H = matrix(NA))
+    #   fit <- KFAS::fitSSM(mod, inits = c(0, 0), method = "BFGS")$model
+    #   kfs_out <- KFAS::KFS(fit)
+    #   as.numeric(kfs_out$a[1:length(y_vec)])
+    # },
+    # garch_state = {
+    #   y_vec <- as.numeric(target) 
+    #   spec <- rugarch::ugarchspec(
+    #     variance.model = list(model = "sGARCH", garchOrder = c(1,1)),
+    #     mean.model = list(armaOrder = c(0,0))
+    #   )
+    #   garch_fit <- rugarch::ugarchfit(spec = spec, data = y_vec)
+    #   as.numeric(rugarch::sigma(garch_fit))
+    # }
   )
 # fit model på træningssættet
 final_xgb_fit <- final_xgb_wf  |> 
   parsnip::fit(data = training_data_f_transformed)
 
+# alternativ på vores egen test data, så kan vi se hvad vi fanger
+# final_xgb_fit <- final_xgb_wf  |> 
+#   parsnip::fit(data = train_df)
 
-t_median <- median(train_df$target)
-t_mad <- stats::mad(train_df$target)
+
+#importance 
+final_xgb_fit  |> 
+  workflows::extract_fit_parsnip()  |> 
+  vip::vi(method = "model")  |> 
+  print(n = 50)
+
+
+t_median <- median(training_data_f$target)
+t_mad <- stats::mad(training_data_f$target)
 
 
 predictions_asinh <- predict(
@@ -242,15 +332,21 @@ predictions_asinh <- predict(
   new_data = test_data_f
 )
 
+# alternativ på vores egen test data, så kan vi se hvad vi fanger
+# predictions_asinh <- predict(
+#   final_xgb_fit, 
+#   new_data =test_df 
+# )
 # vi skal have dem til normale priser
+# tilføj kalman som kovariat
 final_submission <- test_data_f  |> 
   dplyr::select(id)  |> 
   dplyr::bind_cols(predictions_asinh)  |> 
   dplyr::mutate(
     target = sinh(.pred) * t_mad + t_median
   )  |> 
-  dplyr::select(id, target)  |> 
-  save_results(model_name = "første_xgboost")
+  dplyr::select(id, target) 
+  # save_results(model_name = "xgb_19-02-2013")
 
 # ggplot2::ggplot(
 #   data = final_submission, 
@@ -259,3 +355,21 @@ final_submission <- test_data_f  |>
 #     y = target
 #   )
 # ) + ggplot2::geom_line()
+
+# tjek qqplot ----
+library(ggplot2)
+
+# Vi samler data i en lille tibble til plottet
+qq_data <- data.frame(
+  actual = test_df$target,
+  predicted = final_submission$target
+)
+
+ggplot(qq_data, aes(sample = predicted)) +
+  stat_qq(distribution = qt, dparams = list(df = 5)) + # Valgfrit: sammenlign med t-fordeling
+  stat_qq_line() +
+  labs(title = "QQ-plot: Model Predictions",
+       subtitle = "Sammenligning af prædikteret fordeling mod teoretisk fordeling") +
+  theme_minimal()
+
+

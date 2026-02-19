@@ -32,4 +32,5 @@ Imports:
     TTR,
     vip,
     corrr,
-    glue
+    glue,
+    rugarch
