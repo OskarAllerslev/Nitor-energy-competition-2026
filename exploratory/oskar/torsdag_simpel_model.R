@@ -46,12 +46,10 @@ folds <- rsample::sliding_period(
 
 
 library(KFAS)
-train_df_engineered <- train_df# |>
-  # dplyr::mutate(
-  # ) |>
-  # dplyr::select(-wind_direction_80m, -wind_dir_rad)
-
-
+train_df_engineered <- train_df |>
+  dplyr::mutate(
+    target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
+  ) 
 
 
 # step harmonic sin(2pi * frek * x / cycle_size) samme med cos
@@ -64,7 +62,6 @@ initial_recipe <- recipes::recipe(
 recipes::update_role(id, new_role = "ID") |>
 recipes::step_mutate(
     wind_speed_80m = wind_speed_80m^3,
-    target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
     # wind_dir_rad = wind_direction_80m * (pi / 180),
     wind_dir_sin = sin(wind_direction_80m * (pi /180)),
     wind_dir_cos = cos(wind_direction_80m * (pi /180)),
@@ -216,3 +213,49 @@ saveRDS(best_params, file = "./inst/torsdag_aften/model/best_params.rds")
 saveRDS(best_xgb_params, file = "./inst/torsdag_aften/model/best_xgb_params.rds")
 
 df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
+
+# vi skal fitte model med disse hyperparams 
+best_params_final <- head(df, n = 1)
+
+final_xgb_wf <- xgb_wf  |> 
+  tune::finalize_workflow(best_params_final)
+
+
+# test og trainingdaten
+test_data_f <- load_nitor_test_data()
+training_data_f <- load_full_dataset()
+training_data_f_transformed <- training_data_f  |> 
+  dplyr::mutate(
+    target = asinh((target - t_median) / t_mad)
+  )
+# fit model på træningssættet
+final_xgb_fit <- final_xgb_wf  |> 
+  parsnip::fit(data = training_data_f_transformed)
+
+
+t_median <- median(train_df$target)
+t_mad <- stats::mad(train_df$target)
+
+
+predictions_asinh <- predict(
+  final_xgb_fit, 
+  new_data = test_data_f
+)
+
+# vi skal have dem til normale priser
+final_submission <- test_data_f  |> 
+  dplyr::select(id)  |> 
+  dplyr::bind_cols(predictions_asinh)  |> 
+  dplyr::mutate(
+    target = sinh(.pred) * t_mad + t_median
+  )  |> 
+  dplyr::select(id, target)  |> 
+  save_results(model_name = "første_xgboost")
+
+# ggplot2::ggplot(
+#   data = final_submission, 
+#   mapping = ggplot2::aes(
+#     x = id, 
+#     y = target
+#   )
+# ) + ggplot2::geom_line()
