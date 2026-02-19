@@ -46,17 +46,10 @@ folds <- rsample::sliding_period(
 
 
 library(KFAS)
-train_df_engineered <- train_df |>
-  dplyr::mutate(
-    wind_speed_80m = wind_speed_80m^3,
-    target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
-    wind_dir_rad = wind_direction_80m * (pi / 180),
-    wind_dir_sin = sin(wind_direction_80m),
-    wind_dir_cos = cos(wind_direction_80m),
-    residual_load = load_forecast - solar_forecast - wind_forecast, 
-    temp_index = pmax(0, wet_bulb_temperature_2m - 22) + pmax(0, 18 - air_temperature_2m)
-  ) |> 
-  dplyr::select(-wind_direction_80m, -wind_dir_rad)
+train_df_engineered <- train_df# |>
+  # dplyr::mutate(
+  # ) |> 
+  # dplyr::select(-wind_direction_80m, -wind_dir_rad)
 
 
 
@@ -69,6 +62,16 @@ initial_recipe <- recipes::recipe(
   data = train_df_engineered
 )  |>
 recipes::update_role(id, new_role = "ID") |>
+recipes::step_mutate(
+    wind_speed_80m = wind_speed_80m^3,
+    target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
+    # wind_dir_rad = wind_direction_80m * (pi / 180),
+    wind_dir_sin = sin(wind_direction_80m * (pi /180)),
+    wind_dir_cos = cos(wind_direction_80m * (pi /180)),
+    residual_load = load_forecast - solar_forecast - wind_forecast, 
+    temp_index = pmax(0, wet_bulb_temperature_2m - 22) + pmax(0, 18 - air_temperature_2m)
+)  |> 
+  recipes::step_rm(wind_direction_80m )  |> 
 recipes::step_dummy(market, one_hot = TRUE) |>
 recipes::step_date(
   delivery_start,
