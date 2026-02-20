@@ -13,3 +13,11 @@ save_results <- function(data, model_name, prefix = "", postfix = "") {
   dir.create(dirpath, showWarnings = TRUE, recursive = TRUE)
   write.csv(data, path, row.names = FALSE)
 }
+
+save_object <- function(objectToSave, model_name, prefix = "", postfix = "") {
+  timestamp <- format(Sys.time(), "%d-%m-%Y %H-%M-%S")
+  dirpath <- glue::glue("./inst/{model_name}/model/")
+  path <- glue::glue("{dirpath}{prefix}{model_name}{timestamp}{postfix}.rds")
+  dir.create(dirpath, showWarnings = TRUE, recursive = TRUE)
+  saveRDS(data, file = path)
+}

@@ -1,7 +1,7 @@
 
 
-#' data_transform 
-#' 
+#' data_transform
+#'
 #' @training_data training_data from the function
 #' @test_data_bool indicates if we have target or not default it taht we have target
 #' @export
@@ -45,7 +45,7 @@ data_transform <- function(
       # time curve
       days_since_start = base::as.numeric(
         base::difftime(
-          delivery_start, 
+          delivery_start,
           min(training_data$delivery_start),
           units = "days"
         )
@@ -57,4 +57,9 @@ data_transform <- function(
     dplyr::filter(!is.na(id))
 
   return(result)
+}
+
+
+remove_target <- function(df) {
+  df |> dplyr::select(-target)
 }

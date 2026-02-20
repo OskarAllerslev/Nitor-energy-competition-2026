@@ -31,9 +31,9 @@ train_df_test <- data.frame(
   median <- median(test_df$target),
   mad <- stats::mad(test_df$target)
 )
-train_df <- train_df  |> 
+train_df <- train_df  |>
   data_transform()
-test_df <- test_df  |> 
+test_df <- test_df  |>
   data_transform()
 
 
@@ -140,36 +140,36 @@ initial_recipe <- recipes::recipe(
   ) |>
   recipes::step_rm(delivery_start) |>
   recipes::step_naomit(recipes::all_predictors()) |>
-  recipes::step_rm(delivery_end)  
+  recipes::step_rm(delivery_end)
 
 ## visualiser vores recipes ----
 
-prepped_recipe <- recipes::prep(
-  initial_recipe,
-  training = train_df 
-)
-
-transformed_train_data <- recipes::bake(
-  prepped_recipe,
-  new_data = NULL
-)
+# prepped_recipe <- recipes::prep(
+#   initial_recipe,
+#   training = train_df
+# )
+#
+# transformed_train_data <- recipes::bake(
+#   prepped_recipe,
+#   new_data = NULL
+# )
 
 # temp plots
 
 # ggplot2::ggplot(
-#   data = transformed_train_data  |>  dplyr::filter(id < 2000), 
+#   data = transformed_train_data  |>  dplyr::filter(id < 2000),
 #   mapping = ggplot2::aes(
 #     x = id ,
 #   )
-# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = garch_state), color = "red", size = 2) + 
+# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = garch_state), color = "red", size = 2) +
 #    ggplot2::geom_line(mapping = ggplot2::aes(y  = target), color = "black", alpha = 0.5)
 
 # ggplot2::ggplot(
-#   data = transformed_train_data  |>  dplyr::filter(id < 500), 
+#   data = transformed_train_data  |>  dplyr::filter(id < 500),
 #   mapping = ggplot2::aes(
 #     x = id ,
 #   )
-# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = kalman), color = "red", size = 2) + 
+# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = kalman), color = "red", size = 2) +
 #    ggplot2::geom_line(mapping = ggplot2::aes(y  = target), color = "black", alpha = 0.5)
 
 # ggplot2::ggplot(
@@ -213,9 +213,9 @@ xgb_spec <- parsnip::boost_tree(
 
 # workflow ----
 xgb_wf <- workflows::workflow()  |>
-  workflows::add_case_weights(recency_weight)  |> 
+  workflows::add_case_weights(recency_weight)  |>
   workflows::add_recipe(initial_recipe)  |>
-  workflows::add_model(xgb_spec)  
+  workflows::add_model(xgb_spec)
 
 # parameterrum ----
 
@@ -267,106 +267,89 @@ best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
 
 best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
-saveRDS(best_params, file = "./inst/torsdag_aften/model/best_params.rds")
-saveRDS(best_xgb_params, file = "./inst/torsdag_aften/model/best_xgb_params.rds")
+save_object(best_params, "fredag", prefix = "best_params")
+save_object(best_xgb_params, "fredag", prefix = "best_xgb_params")
 
-df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
+#df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
+
+df <- best_params
 
 ##  antag bedste params ----
 best_params_final <- head(df, n = 1)
 
-final_xgb_wf <- xgb_wf  |> 
+final_xgb_wf <- xgb_wf  |>
   tune::finalize_workflow(best_params_final)
 
 
-## test og trainingdaten ----
-test_data.f <- load_nitor_test_data()  |> 
-  data_transform(test_data_bool = T)
-training_data.f <- load_full_dataset()  |> 
-  data_transform()
-training_data.f.notrans <- load_full_dataset()
-
-
 ## fit model på træningssættet ----
-final_xgb_fit <- final_xgb_wf  |> 
-  parsnip::fit(data = training_data.f)
-
-
-# alternativ på vores egen test data, så kan vi se hvad vi fanger
-# vi skal lave splits 
-set.seed(1)
-splits.cheat <- rsample::initial_time_split(
-  data = training_data.f,
-  prop = 0.85
-)
-train_df.cheat <- rsample::training(splits.cheat)
-test_df.cheat <- rsample::testing(splits.cheat)
-
-
-
-
-splits.cheat.notrans <- rsample::initial_time_split(
-  data = training_data.f.notrans,
-  prop = 0.85
-)
-train_df.cheat.notrans <- rsample::training(splits.cheat.notrans)
-test_df.cheat.notrans <- rsample::testing(splits.cheat.notrans)
-
-final_xgb_fit <- final_xgb_wf  |> 
-  parsnip::fit(data = train_df.cheat)
+final_xgb_fit <- final_xgb_wf  |>
+  parsnip::fit(data = train_df)
 
 
 ### importance ----
-final_xgb_fit  |> 
-  workflows::extract_fit_parsnip()  |> 
-  vip::vi(method = "model")  |> 
+final_xgb_fit  |>
+  workflows::extract_fit_parsnip()  |>
+  vip::vi(method = "model")  |>
   print(n = 50)
 
 
 
 ## predicitons ----
 
-t_median <- median(training_data.f.notrans$target)
-t_mad <- stats::mad(training_data.f.notrans$target)
+
+
+
 
 predictions_asinh <- predict(
-  final_xgb_fit, 
-  new_data = test_data.f 
+  final_xgb_fit,
+  new_data = test_df
 )
-# til intern data
-t_median <- median(train_df.cheat.notrans$target)
-t_mad <- stats::mad(train_df.cheat.notrans$target)
 
-predictions_asinh.cheat <- predict(
-  final_xgb_fit, 
-  new_data = test_df.cheat
-)  
-final_pred_intern <- predictions_asinh.cheat  |> 
-  dplyr::mutate(
-    .pred = sinh(.pred) * t_mad + t_median
-  )
+# til intern data
+
+# final_pred_intern <- predictions_asinh  |>
+#   dplyr::mutate(
+#     .pred = sinh(.pred) * train_df_stats$mad....stats..mad.train_df.target. + train_df_stats$median....median.train_df.target.
+#   )
+#
+# test_df |> dplyr::mutate(pred = final_pred_intern$.pred) |> yardstick::rmse(target, pred)
+
+
+
+full_data_frame <- rbind(train_df |> remove_target(), test_df |> remove_target(), load_nitor_test_data() |> data_transform(TRUE))
+
+predictions_final <- full_data_frame |>
+  dplyr::mutate(target = predict(
+    final_xgb_fit,
+    new_data = full_data_frame
+  )$.pred) |>
+  dplyr::mutate(target = sinh(target) * train_df_stats$mad....stats..mad.train_df.target. + train_df_stats$median....median.train_df.target.)
+
+
+final_results <- predictions_final |> dplyr::filter(id >= 133627) |> dplyr::select(id, target) |> dplyr::arrange(id)
+save_results(final_results, "fredag")
 
 # alternativ på vores egen test data, så kan vi se hvad vi fanger
 # predictions_asinh <- predict(
-#   final_xgb_fit, 
-#   new_data =test_df 
+#   final_xgb_fit,
+#   new_data =test_df
 # )
 # vi skal have dem til normale priser
 # tilføj kalman som kovariat
 
-final_submission <- test_data.f  |> 
-  dplyr::select(id)  |> 
-  dplyr::bind_cols(predictions_asinh)  |> 
+final_submission <- test_data.f  |>
+  dplyr::select(id)  |>
+  dplyr::bind_cols(predictions_asinh)  |>
   dplyr::mutate(
     target = sinh(.pred) * t_mad + t_median
-  )  |> 
-  dplyr::select(id, target)  # |> 
+  )  |>
+  dplyr::select(id, target)  # |>
   # save_results(model_name = "xgb_20-02-1348")
 
 # ggplot2::ggplot(
-#   data = final_submission, 
+#   data = final_submission,
 #   mapping = ggplot2::aes(
-#     x = id, 
+#     x = id,
 #     y = target
 #   )
 # ) + ggplot2::geom_line()
@@ -375,8 +358,8 @@ final_submission <- test_data.f  |>
 
 # Vi samler data i en lille tibble til plottet
 qq_data <- data.frame(
-  actual = test_df.cheat.notrans$target,
-  predicted = final_pred_intern$.pred
+  actual = (rsample::testing(splits) |> dplyr::filter(id < 133627))$target,
+  predicted = (predictions_final |> dplyr::filter(id < 133627, id >= 112727))$target
 )
 
 library(ggplot2)
@@ -388,14 +371,14 @@ ggplot(qq_data, aes(sample = predicted)) +
   theme_minimal()
 
 actual_data <- data.frame(
-  id = test_df.cheat.notrans$id,
-  actual = test_df.cheat.notrans$target,
+  id = (predictions_final |> dplyr::filter(id < 133627, id >= 112727))$id,
+  actual = qq_data$actual,
   predicted = qq_data$predicted
-)  
-ggplot2::ggplot(actual_data, ggplot2::aes(x = id)) + 
-  ggplot2::geom_line( ggplot2::aes(y = actual, color = "black", alpha = 0.7, linetype = "dashed")) +  
-  ggplot2::geom_line( ggplot2::aes(y = predicted, color = "red" ))   
+)
+ggplot2::ggplot(actual_data, ggplot2::aes(x = id)) +
+  ggplot2::geom_line( ggplot2::aes(y = actual, color = "black", alpha = 0.7, linetype = "dashed")) +
+  ggplot2::geom_line( ggplot2::aes(y = predicted, color = "red" ))
 
 
-qq_data  |> 
+qq_data  |>
   yardstick::rmse(actual, predicted)
