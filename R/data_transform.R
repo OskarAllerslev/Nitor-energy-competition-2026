@@ -41,7 +41,7 @@ data_transform <- function(
         .before = 6,
         .complete = FALSE
       ),
-      extreme_load_risk = residual_load^2, 
+      extreme_load_risk = residual_load^2 ,
       # time curve
       days_since_start = base::as.numeric(
         base::difftime(

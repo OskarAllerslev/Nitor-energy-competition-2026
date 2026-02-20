@@ -5,22 +5,37 @@ training_data <- load_full_dataset()
 ## tilføj kalman filter ----
 
 
-t_median <- median(training_data$target)
-t_mad <- stats::mad(training_data$target)
+global_stats <- data.frame(
+  median <- median(training_data$target),
+  mad <- stats::mad(training_data$target)
+)
 
-library(KFAS)
 
-training_data_initial_transform <- data_transform(training_data)
+# training_data_initial_transform <- data_transform(training_data)
 
 ## rsample::rolling_origin ----
 
 set.seed(1)
 splits <- rsample::initial_time_split(
-  data = training_data_initial_transform,
+  data = training_data,
   prop = 0.85
 )
 train_df <- rsample::training(splits)
 test_df <- rsample::testing(splits)
+
+train_df_stats <- data.frame(
+  median <- median(train_df$target),
+  mad <- stats::mad(train_df$target)
+)
+train_df_test <- data.frame(
+  median <- median(test_df$target),
+  mad <- stats::mad(test_df$target)
+)
+train_df <- train_df  |> 
+  data_transform()
+test_df <- test_df  |> 
+  data_transform()
+
 
 
 # folds ----
@@ -36,10 +51,10 @@ folds <- rsample::sliding_period(
 )
 
 # tjekker lige hvad der er i folds
-#fold1 <- rsample::get_rsplit(folds, 1)
-#fold1_train <- rsample::analysis(fold1)
+# fold1 <- rsample::get_rsplit(folds, 1)
+# fold1_train <- rsample::analysis(fold1)
 # så dette er 28 dage man har i et fold
-#fold1_test <- rsample::assessment(fold1)
+# fold1_test <- rsample::assessment(fold1)
 # dette er så faktisk den følgende dag
 # dette giver så vist nok ret god mening?
 
@@ -51,13 +66,11 @@ folds <- rsample::sliding_period(
 # wind direction skal lave til cos / sin
 # wind speed ?
 
-
 # library(KFAS)
 # train_df_engineered <- train_df |>
 #   dplyr::mutate(
 #     target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
-#   ) 
-
+#   )
 
 # step harmonic sin(2pi * frek * x / cycle_size) samme med cos
 # TODO: tilføj residual load
@@ -65,48 +78,68 @@ folds <- rsample::sliding_period(
 initial_recipe <- recipes::recipe(
   target ~ .,
   # data = train_df_engineered
-  data = train_df 
-)  |>
-recipes::update_role(id, new_role = "ID") |>
-recipes::step_mutate(
+  data = train_df
+) |>
+  recipes::update_role(id, new_role = "ID") |>
+  recipes::step_mutate(
     wind_speed_80m = wind_speed_80m^3,
-    wind_dir_sin = sin(wind_direction_80m * (pi /180)),
-    wind_dir_cos = cos(wind_direction_80m * (pi /180)),
+    wind_dir_sin = sin(wind_direction_80m * (pi / 180)),
+    wind_dir_cos = cos(wind_direction_80m * (pi / 180)),
     residual_load = load_forecast - solar_forecast - wind_forecast,
-    temp_index = pmax(0, wet_bulb_temperature_2m - 22) + pmax(0, 18 - air_temperature_2m),
-    convective_threat = convective_available_potential_energy * (1/ (convective_inhibition + 0.01)) * cloud_cover_high, 
-    icing_risk = dplyr::if_else(freezing_level_height < 150 & relative_humidity_2m > 90, 1,0)
-)  |>
-  recipes::step_rm(wind_direction_80m )  |>
-recipes::step_dummy(market, one_hot = TRUE) |>
-recipes::step_date(
-  delivery_start,
-  features = c("dow", "month", "doy", "year"),
-  label = FALSE,
-  keep_original_cols = TRUE
-)  |>
-recipes::step_time(
-  delivery_start,
-  features = c("hour"),
-  keep_original_cols = TRUE
-)  |>
-recipes::step_harmonic( #harmonic på ugedag
-  delivery_start_dow,
-  frequency = 1,
-  cycle_size = 7
-)  |>
-recipes::step_harmonic( #harmonic på hour
-  delivery_start_hour,
-  frequency = 1,
-  cycle_size =24
-)  |>
-recipes::step_harmonic( #harmonic på year
-  delivery_start_doy,
-  frequency = 1,
-  cycle_size = 365.25
-)  |> 
+    temp_index = pmax(0, wet_bulb_temperature_2m - 22) +
+      pmax(0, 18 - air_temperature_2m),
+    convective_threat = convective_available_potential_energy *
+      (1 / (convective_inhibition + 0.01)) *
+      cloud_cover_high,
+    icing_risk = dplyr::if_else(
+      freezing_level_height < 150 & relative_humidity_2m > 90,
+      1,
+      0
+    )
+  ) |>
+  recipes::step_rm(wind_direction_80m) |>
+  recipes::step_dummy(market, one_hot = TRUE) |>
+  # recipes::step_mutate(
+  #   days_since_start = base::as.numeric(
+  #     base::difftime(
+  #       delivery_start,
+  #       min(training_data$delivery_start),
+  #       units = "days"
+  #     )
+  #   ),
+  #   recency_weight = hardhat::importance_weights(exp(days_since_start / 180))
+  # ) |>
+  recipes::step_date(
+    delivery_start,
+    features = c("dow", "month", "doy", "year"),
+    label = FALSE,
+    keep_original_cols = TRUE
+  ) |>
+  recipes::step_time(
+    delivery_start,
+    features = c("hour"),
+    keep_original_cols = TRUE
+  ) |>
+  recipes::step_harmonic(
+    #harmonic på ugedag
+    delivery_start_dow,
+    frequency = 1,
+    cycle_size = 7
+  ) |>
+  recipes::step_harmonic(
+    #harmonic på hour
+    delivery_start_hour,
+    frequency = 1,
+    cycle_size = 24
+  ) |>
+  recipes::step_harmonic(
+    #harmonic på year
+    delivery_start_doy,
+    frequency = 1,
+    cycle_size = 365.25
+  ) |>
   recipes::step_rm(delivery_start) |>
-  recipes::step_naomit(recipes::all_predictors())  |> 
+  recipes::step_naomit(recipes::all_predictors()) |>
   recipes::step_rm(delivery_end)  
 
 ## visualiser vores recipes ----
@@ -180,14 +213,14 @@ xgb_spec <- parsnip::boost_tree(
 
 # workflow ----
 xgb_wf <- workflows::workflow()  |>
+  workflows::add_case_weights(recency_weight)  |> 
   workflows::add_recipe(initial_recipe)  |>
-  workflows::add_model(xgb_spec)  |> 
-  workflows::add_case_weights(recency_weight)
+  workflows::add_model(xgb_spec)  
 
 # parameterrum ----
 
 xgb_hyper_space <- dials::grid_latin_hypercube(
-  dials::trees(range = c(500L, 2000L)),
+  dials::trees(range = c(100L, 2000L)),
   dials::tree_depth(range = c(3L, 9L)),
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
@@ -200,7 +233,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
 
 
 # eval_metric <- yardstick::metric_set(yardstick::rmse)
-eval_metric <- yardstick::metric_set(yardstick::huber_loss_pseudo)
+eval_metric <- yardstick::metric_set(yardstick::rmse)
 
 
 ctrl <- tune::control_grid(
@@ -268,6 +301,9 @@ splits.cheat <- rsample::initial_time_split(
 )
 train_df.cheat <- rsample::training(splits.cheat)
 test_df.cheat <- rsample::testing(splits.cheat)
+
+
+
 
 splits.cheat.notrans <- rsample::initial_time_split(
   data = training_data.f.notrans,
