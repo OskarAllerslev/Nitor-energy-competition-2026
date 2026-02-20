@@ -372,4 +372,12 @@ ggplot(qq_data, aes(sample = predicted)) +
        subtitle = "Sammenligning af prædikteret fordeling mod teoretisk fordeling") +
   theme_minimal()
 
+actual_data <- data.frame(
+  id = test_df$id,
+  actual = test_df$target,
+  predicted = final_submission$target
+)
+ggplot2::ggplot(actual_data, ggplot2::aes(x = id)) + 
+  ggplot2::geom_line( ggplot2::aes(y = actual, color = "black", alpha = 0.7, linetype = "dashed")) +  
+  ggplot2::geom_line( ggplot2::aes(y = predicted, color = "red" ))   
 
