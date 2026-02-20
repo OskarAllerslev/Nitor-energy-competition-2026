@@ -23,8 +23,8 @@ training_split <- rsample::training(splits)
 testing_split <- rsample::testing(splits)
 
 train_df_stats <- data.frame(
-  median <- median(training_split$target),
-  mad <- stats::mad(training_split$target)
+  median = median(training_split$target),
+  mad = stats::mad(training_split$target)
 )
 train_df_test <- data.frame(
   median <- median(testing_split$target),
@@ -195,31 +195,98 @@ final_xgb_fit  |>
 
 
 
-inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad....stats..mad.train_df.target., train_df_stats$median....median.train_df.target.)
 
+
+inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad, train_df_stats$median)
 
 
 ## predicitons ----
-fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit, inverse_prediction_transformation = inv_prediction_trans, data_transformation_function = function(x) {data_transformation_to_use(x, T)})
-
-
-
-
-inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad....stats..mad.train_df.target., train_df_stats$median....median.train_df.target.)
-
-
-predict(final_xgb_fit, load_full_dataset() |> my_trans())
-
 my_trans <- function(x) {x |>
     data_transformation_to_use(T)  }
 
-## predicitons ----
+
 fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
                                           inverse_prediction_transformation = inv_prediction_trans,
                                           data_transformation_function = my_trans)
 
-fit_on_all |> dplyr::select(target)
-extract_fit_subset(fit_on_all, testing_split) |> dplyr::select(target.x, target.y)
+extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_data_for_prediction(fit_on_all) |> save_results(model_name)
+
+
+## fit on full data set
+
+fulldata_df <- load_full_dataset() |> data_transformation_to_use()
+
+full_stats <- data.frame(
+  median = median(fulldata_df$target),
+  mad = stats::mad(fulldata_df$target)
+)
+
+
+final_xgb_fit <- final_xgb_wf  |>
+  parsnip::fit(data = fulldata_df)
+
+
+### importance ----
+final_xgb_fit  |>
+  workflows::extract_fit_parsnip()  |>
+  vip::vi(method = "model")  |>
+  print(n = 50)
+
+
+
+inv_prediction_trans <- inv_asinh_trans(full_stats$mad, full_stats$median)
+
+
+## predicitons ----
+my_trans <- function(x) {x |>
+    data_transformation_to_use(T)  }
+
+
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
+                                          inverse_prediction_transformation = inv_prediction_trans,
+                                          data_transformation_function = my_trans)
+
+extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_data_for_prediction(fit_on_all) |> save_results(model_name)
+
+
+
+
+## fit on 2023 october and forward data set
+
+fulldata_df <- rbind(training_split, testing_split) |> data_transformation_to_use()
+
+full_stats <- data.frame(
+  median = median(fulldata_df$target),
+  mad = stats::mad(fulldata_df$target)
+)
+
+
+final_xgb_fit <- final_xgb_wf  |>
+  parsnip::fit(data = fulldata_df)
+
+
+### importance ----
+final_xgb_fit  |>
+  workflows::extract_fit_parsnip()  |>
+  vip::vi(method = "model")  |>
+  print(n = 50)
+
+
+
+inv_prediction_trans <- inv_asinh_trans(full_stats$mad, full_stats$median)
+
+
+## predicitons ----
+my_trans <- function(x) {x |>
+    data_transformation_to_use(T)  }
+
+
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
+                                          inverse_prediction_transformation = inv_prediction_trans,
+                                          data_transformation_function = my_trans)
+
 extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
 extract_data_for_prediction(fit_on_all) |> save_results(model_name)
 
