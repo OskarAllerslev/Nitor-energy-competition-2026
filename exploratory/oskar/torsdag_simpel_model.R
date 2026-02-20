@@ -81,22 +81,6 @@ initial_recipe <- recipes::recipe(
   data = train_df
 ) |>
   recipes::update_role(id, new_role = "ID") |>
-  recipes::step_mutate(
-    wind_speed_80m = wind_speed_80m^3,
-    wind_dir_sin = sin(wind_direction_80m * (pi / 180)),
-    wind_dir_cos = cos(wind_direction_80m * (pi / 180)),
-    residual_load = load_forecast - solar_forecast - wind_forecast,
-    temp_index = pmax(0, wet_bulb_temperature_2m - 22) +
-      pmax(0, 18 - air_temperature_2m),
-    convective_threat = convective_available_potential_energy *
-      (1 / (convective_inhibition + 0.01)) *
-      cloud_cover_high,
-    icing_risk = dplyr::if_else(
-      freezing_level_height < 150 & relative_humidity_2m > 90,
-      1,
-      0
-    )
-  ) |>
   recipes::step_rm(wind_direction_80m) |>
   recipes::step_dummy(market, one_hot = TRUE) |>
   # recipes::step_mutate(
@@ -237,7 +221,7 @@ eval_metric <- yardstick::metric_set(yardstick::rmse)
 
 
 ctrl <- tune::control_grid(
-  save_pred = T,
+  #save_pred = T,
   verbose = T,
   allow_par = T
 )

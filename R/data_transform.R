@@ -41,7 +41,6 @@ data_transform <- function(
         .before = 6,
         .complete = FALSE
       ),
-      extreme_load_risk = residual_load^2 ,
       # time curve
       days_since_start = base::as.numeric(
         base::difftime(
@@ -50,7 +49,21 @@ data_transform <- function(
           units = "days"
         )
       ),
-      recency_weight = hardhat::importance_weights(exp(days_since_start / 180))
+      surface_pressure_lag_24 = dplyr::lag(surface_pressure, n = 24),
+      recency_weight = hardhat::importance_weights(exp(days_since_start / 180)),
+      wind_speed_80m = wind_speed_80m^3,
+      wind_dir_sin = sin(wind_direction_80m * (pi / 180)),
+      wind_dir_cos = cos(wind_direction_80m * (pi / 180)),
+      temp_index = pmax(0, wet_bulb_temperature_2m - 22) +
+        pmax(0, 18 - air_temperature_2m),
+      convective_threat = convective_available_potential_energy *
+        (1 / (convective_inhibition + 0.01)) *
+        cloud_cover_high,
+      icing_risk = dplyr::if_else(
+        freezing_level_height < 150 & relative_humidity_2m > 90,
+        1,
+        0
+      )
     ) |>
     dplyr::arrange(id, delivery_start) |>
     dplyr::ungroup() |>
