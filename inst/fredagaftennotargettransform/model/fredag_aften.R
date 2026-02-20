@@ -197,16 +197,18 @@ final_xgb_fit  |>
 inv_prediction_trans <- function(x) {x}
 
 
+my_trans <- function(x) {x |>
+    add_tail_covariates() |>
+    data_transformation_to_use()  }
 
 ## predicitons ----
 fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
                                           inverse_prediction_transformation = inv_prediction_trans,
-                                          data_transformation_function = function(x) {x |>
-                                              add_tail_covariates() |>
-                                              data_transformation_to_use()  })
+                                          data_transformation_function = my_trans)
 
-extract_data_for_prediction(fit_on_all) |> save_results("fredagsize")
 
+extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_data_for_prediction(fit_on_all) |> save_results("fredagaftennotargettransform")
 
 
 
@@ -214,8 +216,8 @@ extract_data_for_prediction(fit_on_all) |> save_results("fredagsize")
 
 # Vi samler data i en lille tibble til plottet
 qq_data <- data.frame(
-  actual = (rsample::testing(splits) |> dplyr::filter(id < 133627))$target,
-  predicted = (predictions_final |> dplyr::filter(id < 133627, id >= 112727))$target
+  actual = testing_split$target,
+  predicted = extract_fit_subset(fit_on_all, testing_split)$target.x
 )
 
 library(ggplot2)

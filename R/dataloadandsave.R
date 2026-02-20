@@ -49,7 +49,7 @@ fit_final_model_on_all_data <- function(model, inverse_prediction_transformation
   prediction_data <- load_nitor_test_data() |> data_transformation_function()
   full_df <- rbind(training_data, prediction_data)
   full_df |>
-    dplyr::mutate(target = predict(model, new_data=full_data_frame)$.pred) |>
+    dplyr::mutate(target = predict(model, new_data=full_df)$.pred) |>
     dplyr::mutate(target = inverse_vectorized(target))
 }
 
