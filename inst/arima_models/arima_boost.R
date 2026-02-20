@@ -23,12 +23,12 @@ training_split <- rsample::training(splits)
 testing_split <- rsample::testing(splits)
 
 train_df_stats <- data.frame(
-  median <- median(training_split$target),
-  mad <- stats::mad(training_split$target)
+  median = median(training_split$target),
+  mad = stats::mad(training_split$target)
 )
 train_df_test <- data.frame(
-  median <- median(testing_split$target),
-  mad <- stats::mad(testing_split$target)
+  median = median(testing_split$target),
+  mad = stats::mad(testing_split$target)
 )
 train_df <- training_split  |>
   data_transformation_to_use()
@@ -96,7 +96,7 @@ initial_recipe <- recipes::recipe(
 
 xgb_spec <- modeltime::arima_boost(
   # ARIMA parametre (lader vi stå tomme for at tvinge auto.arima)
-  
+
   # XGBoost hyperparametre
   trees = tune::tune(),
   tree_depth = tune::tune(),
@@ -105,11 +105,11 @@ xgb_spec <- modeltime::arima_boost(
   learn_rate = tune::tune(),
   sample_size = 0.7,
   loss_reduction = 0.001
-) |> 
+) |>
   parsnip::set_engine(
     engine = "auto_arima_xgboost"
     # nthread kan også sættes her via list(nthread = cores) i fremtiden
-  ) |> 
+  ) |>
   parsnip::set_mode("regression")
 
 
@@ -129,7 +129,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size =1 
+  size =1
 )
 
 # fit model ----
@@ -147,7 +147,7 @@ ctrl <- tune::control_grid(
 set.seed(1)
 # options(future.globals.maxSize = Inf)
 # future::plan(future::sequential)
-# cores <- parallel::detectCores() - 1
+cores <- parallel::detectCores() - 1
 # cl <- parallel::makePSOCKcluster(cores)
 # doParallel::registerDoParallel(cl)
 
