@@ -9,28 +9,10 @@ t_median <- median(training_data$target)
 t_mad <- stats::mad(training_data$target)
 
 library(KFAS)
-training_data_initial_transform <- training_data  |> 
-  dplyr::mutate(
-    target = asinh((target - t_median) / t_mad)#,
-    # kalman = {
-    #   y_vec <- as.numeric(target)
-    #   mod <- KFAS::SSModel(y_vec ~ SSMtrend(1, Q = list(matrix(NA))), H = matrix(NA))
-    #   fit <- KFAS::fitSSM(mod, inits = c(0, 0), method = "BFGS")$model
-    #   kfs_out <- KFAS::KFS(fit)
-    #   as.numeric(kfs_out$a[1:length(y_vec)])
-    # },
-    # garch_state = {
-    #   y_vec <- as.numeric(target) 
-    #   spec <- rugarch::ugarchspec(
-    #     variance.model = list(model = "sGARCH", garchOrder = c(1,1)),
-    #     mean.model = list(armaOrder = c(0,0))
-    #   )
-    #   garch_fit <- rugarch::ugarchfit(spec = spec, data = y_vec)
-    #   as.numeric(rugarch::sigma(garch_fit))
-    # }
-  )
 
-
+training_data_initial_transform <- data_transform(
+  training_data = training_data 
+)
 
 ## rsample::rolling_origin ----
 
@@ -39,12 +21,7 @@ splits <- rsample::initial_time_split(
   data = training_data_initial_transform,
   prop = 0.85
 )
-
-
-
-
 train_df <- rsample::training(splits)
-#dplyr::glimpse(train_df)
 test_df <- rsample::testing(splits)
 
 
@@ -102,18 +79,6 @@ recipes::step_mutate(
     convective_threat = convective_available_potential_energy * (1/ (convective_inhibition + 0.01)) * cloud_cover_high, 
     icing_risk = dplyr::if_else(freezing_level_height < 150 & relative_humidity_2m > 90, 1,0)
 )  |>
-  # rolling stats
-recipes::step_window(
-  residual_load, 
-  size = 7, 
-  role = "predictor", 
-  statistic = "mean", 
-  names = "residual_load_ma_6h"
-)  |> 
-  recipes::step_lag(load_forecast, lag = 24)  |> 
-  recipes::step_mutate(
-    load_momentum = load_forecast - dplyr::lag(load_forecast, 3)
-  )  |> 
   recipes::step_rm(wind_direction_80m )  |>
 recipes::step_dummy(market, one_hot = TRUE) |>
 recipes::step_date(
@@ -218,7 +183,8 @@ xgb_spec <- parsnip::boost_tree(
 # workflow ----
 xgb_wf <- workflows::workflow()  |>
   workflows::add_recipe(initial_recipe)  |>
-  workflows::add_model(xgb_spec)
+  workflows::add_model(xgb_spec)  |> 
+  workflows::add_case_weights(recency_weight)
 
 # parameterrum ----
 
@@ -235,7 +201,8 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
 # fit model ----
 
 
-eval_metric <- yardstick::metric_set(yardstick::rmse)
+# eval_metric <- yardstick::metric_set(yardstick::rmse)
+eval_metric <- yardstick::metric_set(yardstick::huber_loss_pseudo)
 
 
 ctrl <- tune::control_grid(
