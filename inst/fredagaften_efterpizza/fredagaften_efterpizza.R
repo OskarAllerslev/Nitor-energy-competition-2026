@@ -195,19 +195,31 @@ final_xgb_fit  |>
 
 
 
-inv_prediction_trans <- function(x) {x}
+inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad....stats..mad.train_df.target., train_df_stats$median....median.train_df.target.)
 
+
+
+## predicitons ----
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit, inverse_prediction_transformation = inv_prediction_trans, data_transformation_function = function(x) {data_transformation_to_use(x, T)})
+
+
+
+
+inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad....stats..mad.train_df.target., train_df_stats$median....median.train_df.target.)
+
+
+predict(final_xgb_fit, load_full_dataset() |> my_trans())
 
 my_trans <- function(x) {x |>
-    add_tail_covariates() |>
-    data_transformation_to_use()  }
+    data_transformation_to_use(T)  }
 
 ## predicitons ----
 fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
                                           inverse_prediction_transformation = inv_prediction_trans,
                                           data_transformation_function = my_trans)
 
-
+fit_on_all |> dplyr::select(target)
+extract_fit_subset(fit_on_all, testing_split) |> dplyr::select(target.x, target.y)
 extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
 extract_data_for_prediction(fit_on_all) |> save_results(model_name)
 
