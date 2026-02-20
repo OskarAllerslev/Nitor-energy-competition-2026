@@ -33,4 +33,5 @@ Imports:
     vip,
     corrr,
     glue,
-    rugarch
+    rugarch,
+    bundle

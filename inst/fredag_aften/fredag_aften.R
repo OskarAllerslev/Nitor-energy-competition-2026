@@ -1,3 +1,6 @@
+data_transformation_to_use <- data_transform_notargetadjust
+
+
 
 # opsætning af data ----
 training_data <- load_full_dataset() |> add_tail_covariates()
@@ -7,8 +10,6 @@ training_data <- load_full_dataset() |> add_tail_covariates()
 
 training_data <- training_data |> dplyr::filter(delivery_start >= "2023-10-01")
 
-
-# training_data_initial_transform <- data_transform(training_data)
 
 ## rsample::rolling_origin ----
 
@@ -29,9 +30,9 @@ train_df_test <- data.frame(
   mad <- stats::mad(testing_split$target)
 )
 train_df <- training_split  |>
-  data_transform()
+  data_transformation_to_use()
 test_df <- testing_split  |>
-  data_transform()
+  data_transformation_to_use()
 
 
 
@@ -47,31 +48,6 @@ folds <- rsample::sliding_period(
   skip = 27
 )
 
-# tjekker lige hvad der er i folds
-# fold1 <- rsample::get_rsplit(folds, 1)
-# fold1_train <- rsample::analysis(fold1)
-# så dette er 28 dage man har i et fold
-# fold1_test <- rsample::assessment(fold1)
-# dette er så faktisk den følgende dag
-# dette giver så vist nok ret god mening?
-
-# feature engineering ----
-# dokumenter godt hvad der sker
-
-#dplyr::glimpse(train_df)
-# lav nok en residual load på load_forcast, load - (wind + solar)?
-# wind direction skal lave til cos / sin
-# wind speed ?
-
-# library(KFAS)
-# train_df_engineered <- train_df |>
-#   dplyr::mutate(
-#     target = asinh((target - median(target, na.rm = TRUE)) / stats::mad(target, na.rm = TRUE)),
-#   )
-
-# step harmonic sin(2pi * frek * x / cycle_size) samme med cos
-# TODO: tilføj residual load
-
 initial_recipe <- recipes::recipe(
   target ~ .,
   # data = train_df_engineered
@@ -80,16 +56,6 @@ initial_recipe <- recipes::recipe(
   recipes::update_role(id, new_role = "ID") |>
   recipes::step_rm(wind_direction_80m) |>
   recipes::step_dummy(market, one_hot = TRUE) |>
-  # recipes::step_mutate(
-  #   days_since_start = base::as.numeric(
-  #     base::difftime(
-  #       delivery_start,
-  #       min(training_data$delivery_start),
-  #       units = "days"
-  #     )
-  #   ),
-  #   recency_weight = hardhat::importance_weights(exp(days_since_start / 180))
-  # ) |>
   recipes::step_date(
     delivery_start,
     features = c("dow", "month", "doy", "year"),
@@ -123,53 +89,6 @@ initial_recipe <- recipes::recipe(
   recipes::step_naomit(recipes::all_predictors()) |>
   recipes::step_rm(delivery_end)
 
-## visualiser vores recipes ----
-
-# prepped_recipe <- recipes::prep(
-#   initial_recipe,
-#   training = train_df
-# )
-#
-# transformed_train_data <- recipes::bake(
-#   prepped_recipe,
-#   new_data = NULL
-# )
-
-# temp plots
-
-# ggplot2::ggplot(
-#   data = transformed_train_data  |>  dplyr::filter(id < 2000),
-#   mapping = ggplot2::aes(
-#     x = id ,
-#   )
-# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = garch_state), color = "red", size = 2) +
-#    ggplot2::geom_line(mapping = ggplot2::aes(y  = target), color = "black", alpha = 0.5)
-
-# ggplot2::ggplot(
-#   data = transformed_train_data  |>  dplyr::filter(id < 500),
-#   mapping = ggplot2::aes(
-#     x = id ,
-#   )
-# ) + ggplot2::geom_line(mapping = ggplot2::aes(y = kalman), color = "red", size = 2) +
-#    ggplot2::geom_line(mapping = ggplot2::aes(y  = target), color = "black", alpha = 0.5)
-
-# ggplot2::ggplot(
-#   data = transformed_train_data ,
-#   mapping = ggplot2::aes(
-#     x = id,
-#     # y = target_alt
-#     y = target
-#   )
-# ) + ggplot2::geom_line()
-
-# ggplot2::ggplot(
-#   data = transformed_train_data  |>  dplyr::filter(id < 120 ),
-#   mapping = ggplot2::aes(
-#     x = id,
-#   )
-# ) + ggplot2::geom_line(mapping = ggplot2::aes(y  = delivery_start_hour_cos_1)) +
-# ggplot2::geom_line(mapping = ggplot2::aes(y  = delivery_start_hour_sin_1))
-
 
 # opsætning af model xgb ----
 
@@ -185,10 +104,10 @@ xgb_spec <- parsnip::boost_tree(
 )  |>
   parsnip::set_engine(
     "xgboost"#,
-   #nthread = 100
+    #nthread = 100
     #tree_method = "gpu_hist",
-   # device = "cuda"
- )  |>
+    # device = "cuda"
+  )  |>
   parsnip::set_mode("regression")
 
 
@@ -208,7 +127,6 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
   size = 50
 )
-
 
 # fit model ----
 
@@ -248,8 +166,8 @@ best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
 
 best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
-save_object(best_params, "fredagsize50", prefix = "best_params")
-save_object(best_xgb_params, "fredagsize50", prefix = "best_xgb_params")
+save_object(best_params, "fredagaftennotargettransform", prefix = "best_params")
+save_object(best_xgb_params, "fredagaftennotargettransform", prefix = "best_xgb_params")
 
 #df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
 
@@ -274,76 +192,23 @@ final_xgb_fit  |>
   print(n = 50)
 
 
-inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad....stats..mad.train_df.target., train_df_stats$median....median.train_df.target.)
+
+
+inv_prediction_trans <- function(x) {x}
 
 
 
 ## predicitons ----
-fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit, inverse_prediction_transformation = inv_prediction_trans, data_transformation_function = function(x) {data_transform(x, T)})
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
+                                          inverse_prediction_transformation = inv_prediction_trans,
+                                          data_transformation_function = function(x) {x |>
+                                              add_tail_covariates() |>
+                                              data_transformation_to_use()  })
 
-
-
-fit_on_all |> dplyr::filter(id %in% (test_df |> dplyr::select(id))$id) |> yardstick::rmse(target, pred)
-test_df |> dplyr::inner_join(fit_on_all, by="id") |> yardstick::rmse(target.x, target.y)
 extract_data_for_prediction(fit_on_all) |> save_results("fredagsize")
 
 
 
-
-
-predictions_asinh <- predict(
-  final_xgb_fit,
-  new_data = test_df
-)
-
-# til intern data
-
-# final_pred_intern <- predictions_asinh  |>
-#   dplyr::mutate(
-#     .pred = sinh(.pred) * train_df_stats$mad....stats..mad.train_df.target. + train_df_stats$median....median.train_df.target.
-#   )
-#
-# test_df |> dplyr::mutate(pred = final_pred_intern$.pred) |> yardstick::rmse(target, pred)
-
-
-
-full_data_frame <- rbind(train_df |> remove_target(), test_df |> remove_target(), load_nitor_test_data() |> data_transform(TRUE))
-
-predictions_final <- full_data_frame |>
-  dplyr::mutate(target = predict(
-    final_xgb_fit,
-    new_data = full_data_frame
-  )$.pred) |>
-  dplyr::mutate(target = sinh(target) * train_df_stats$mad....stats..mad.train_df.target. + train_df_stats$median....median.train_df.target.)
-
-
-final_results <- predictions_final |> dplyr::filter(id >= 133627) |> dplyr::select(id, target) |> dplyr::arrange(id)
-save_results(final_results, "fredag")
-
-# alternativ på vores egen test data, så kan vi se hvad vi fanger
-# predictions_asinh <- predict(
-#   final_xgb_fit,
-#   new_data =test_df
-# )
-# vi skal have dem til normale priser
-# tilføj kalman som kovariat
-
-final_submission <- test_data.f  |>
-  dplyr::select(id)  |>
-  dplyr::bind_cols(predictions_asinh)  |>
-  dplyr::mutate(
-    target = sinh(.pred) * t_mad + t_median
-  )  |>
-  dplyr::select(id, target)  # |>
-  # save_results(model_name = "xgb_20-02-1348")
-
-# ggplot2::ggplot(
-#   data = final_submission,
-#   mapping = ggplot2::aes(
-#     x = id,
-#     y = target
-#   )
-# ) + ggplot2::geom_line()
 
 # tjek qqplot ----
 
