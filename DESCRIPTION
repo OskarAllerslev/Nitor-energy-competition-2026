@@ -34,4 +34,5 @@ Imports:
     corrr,
     glue,
     rugarch,
-    bundle
+    bundle,
+    modeltime

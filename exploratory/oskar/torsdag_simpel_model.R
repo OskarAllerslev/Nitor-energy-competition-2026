@@ -1,12 +1,16 @@
 
 # opsætning af data ----
-training_data <- load_full_dataset() |> add_tail_covariates()
+training_data <- load_full_dataset()
 
 ## tilføj kalman filter ----
 
 
-training_data <- training_data |> dplyr::filter(delivery_start >= "2023-10-01")
+global_stats <- data.frame(
+  median <- median(training_data$target),
+  mad <- stats::mad(training_data$target)
+)
 
+training_data  |> add_tail_covariates()
 
 # training_data_initial_transform <- data_transform(training_data)
 
@@ -17,20 +21,20 @@ splits <- rsample::initial_time_split(
   data = training_data,
   prop = 0.85
 )
-training_split <- rsample::training(splits)
-testing_split <- rsample::testing(splits)
+train_df <- rsample::training(splits)
+test_df <- rsample::testing(splits)
 
 train_df_stats <- data.frame(
-  median <- median(training_split$target),
-  mad <- stats::mad(training_split$target)
+  median <- median(train_df$target),
+  mad <- stats::mad(train_df$target)
 )
 train_df_test <- data.frame(
-  median <- median(testing_split$target),
-  mad <- stats::mad(testing_split$target)
+  median <- median(test_df$target),
+  mad <- stats::mad(test_df$target)
 )
-train_df <- training_split  |>
+train_df <- train_df  |>
   data_transform()
-test_df <- testing_split  |>
+test_df <- test_df  |>
   data_transform()
 
 
@@ -185,7 +189,7 @@ xgb_spec <- parsnip::boost_tree(
 )  |>
   parsnip::set_engine(
     "xgboost"#,
-   #nthread = 100
+   #nthread =15
     #tree_method = "gpu_hist",
    # device = "cuda"
  )  |>
@@ -206,7 +210,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size = 50
+  size = 5
 )
 
 
@@ -248,8 +252,8 @@ best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
 
 best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
-save_object(best_params, "fredagsize50", prefix = "best_params")
-save_object(best_xgb_params, "fredagsize50", prefix = "best_xgb_params")
+save_object(best_params, "fredag", prefix = "best_params")
+save_object(best_xgb_params, "fredag", prefix = "best_xgb_params")
 
 #df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
 
@@ -274,18 +278,8 @@ final_xgb_fit  |>
   print(n = 50)
 
 
-inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad....stats..mad.train_df.target., train_df_stats$median....median.train_df.target.)
-
-
 
 ## predicitons ----
-fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit, inverse_prediction_transformation = inv_prediction_trans, data_transformation_function = function(x) {data_transform(x, T)})
-
-
-
-fit_on_all |> dplyr::filter(id %in% (test_df |> dplyr::select(id))$id) |> yardstick::rmse(target, pred)
-test_df |> dplyr::inner_join(fit_on_all, by="id") |> yardstick::rmse(target.x, target.y)
-extract_data_for_prediction(fit_on_all) |> save_results("fredagsize")
 
 
 
