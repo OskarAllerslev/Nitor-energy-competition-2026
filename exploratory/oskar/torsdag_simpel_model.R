@@ -241,62 +241,47 @@ saveRDS(best_xgb_params, file = "./inst/torsdag_aften/model/best_xgb_params.rds"
 
 df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
 
-# vi skal fitte model med disse hyperparams 
+##  antag bedste params ----
 best_params_final <- head(df, n = 1)
 
 final_xgb_wf <- xgb_wf  |> 
   tune::finalize_workflow(best_params_final)
 
 
-# test og trainingdaten
-# test_data_f <- load_nitor_test_data()  |> 
-#   dplyr::mutate(
+## test og trainingdaten ----
+test_data.f <- load_nitor_test_data()  |> 
+  data_transform(test_data_bool = T)
+training_data.f <- load_full_dataset()  |> 
+  data_transform()
+training_data.f.notrans <- load_full_dataset()
 
-#   )
-training_data_f <- load_full_dataset()
-training_data_f_transformed <- training_data_f    |> 
-  dplyr::mutate(
-    target = asinh((target - t_median) / t_mad)#,
-    # kalman = {
-    #   y_vec <- as.numeric(target)
-    #   mod <- KFAS::SSModel(y_vec ~ SSMtrend(1, Q = list(matrix(NA))), H = matrix(NA))
-    #   fit <- KFAS::fitSSM(mod, inits = c(0, 0), method = "BFGS")$model
-    #   kfs_out <- KFAS::KFS(fit)
-    #   as.numeric(kfs_out$a[1:length(y_vec)])
-    # },
-    # garch_state = {
-    #   y_vec <- as.numeric(target) 
-    #   spec <- rugarch::ugarchspec(
-    #     variance.model = list(model = "sGARCH", garchOrder = c(1,1)),
-    #     mean.model = list(armaOrder = c(0,0))
-    #   )
-    #   garch_fit <- rugarch::ugarchfit(spec = spec, data = y_vec)
-    #   as.numeric(rugarch::sigma(garch_fit))
-    # }
-  )
-# fit model på træningssættet
+
+## fit model på træningssættet ----
 final_xgb_fit <- final_xgb_wf  |> 
-  parsnip::fit(data = training_data_f_transformed)
+  parsnip::fit(data = training_data.f)
 
 # alternativ på vores egen test data, så kan vi se hvad vi fanger
-# final_xgb_fit <- final_xgb_wf  |> 
-#   parsnip::fit(data = train_df)
+final_xgb_fit <- final_xgb_wf  |> 
+  parsnip::fit(data = train_df)
 
 
-#importance 
+### importance ----
 final_xgb_fit  |> 
   workflows::extract_fit_parsnip()  |> 
   vip::vi(method = "model")  |> 
   print(n = 50)
 
 
-t_median <- median(training_data_f$target)
-t_mad <- stats::mad(training_data_f$target)
+
+## predicitons ----
+
+t_median <- median(training_data.f.notrans$target)
+t_mad <- stats::mad(training_data.f.notrans$target)
 
 
 predictions_asinh <- predict(
   final_xgb_fit, 
-  new_data = test_data_f
+  new_data = test_data.f 
 )
 
 # alternativ på vores egen test data, så kan vi se hvad vi fanger
@@ -306,14 +291,15 @@ predictions_asinh <- predict(
 # )
 # vi skal have dem til normale priser
 # tilføj kalman som kovariat
-final_submission <- test_data_f  |> 
+
+final_submission <- test_data.f  |> 
   dplyr::select(id)  |> 
   dplyr::bind_cols(predictions_asinh)  |> 
   dplyr::mutate(
     target = sinh(.pred) * t_mad + t_median
   )  |> 
-  dplyr::select(id, target) 
-  # save_results(model_name = "xgb_19-02-2013")
+  dplyr::select(id, target)  # |> 
+  # save_results(model_name = "xgb_20-02-1348")
 
 # ggplot2::ggplot(
 #   data = final_submission, 
