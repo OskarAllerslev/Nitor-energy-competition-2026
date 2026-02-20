@@ -67,7 +67,8 @@ data_transform <- function(
     ) |>
     dplyr::arrange(id, delivery_start) |>
     dplyr::ungroup() |>
-    dplyr::filter(!is.na(id))
+    dplyr::filter(!is.na(id))  |> 
+    dplyr::select(-days_since_start) # tilføj evt senere 
 
   return(result)
 }
