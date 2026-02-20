@@ -67,13 +67,19 @@ data_transform <- function(
     ) |>
     dplyr::arrange(id, delivery_start) |>
     dplyr::ungroup() |>
-    dplyr::filter(!is.na(id))  |> 
-    dplyr::select(-days_since_start) # tilføj evt senere 
+    dplyr::filter(!is.na(id))  |>
+    dplyr::select(-days_since_start) # tilføj evt senere
 
   return(result)
 }
 
-
-remove_target <- function(df) {
-  df |> dplyr::select(-target)
+inv_asinh_trans <- function(mad, median) {
+  function(t) {
+  sinh(t) * mad + median
 }
+}
+
+
+
+
+

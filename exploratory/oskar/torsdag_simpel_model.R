@@ -188,7 +188,7 @@ xgb_spec <- parsnip::boost_tree(
 )  |>
   parsnip::set_engine(
     "xgboost"#,
-   #nthread =15
+   #nthread = 100
     #tree_method = "gpu_hist",
    # device = "cuda"
  )  |>
@@ -209,7 +209,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size = 5
+  size = 50
 )
 
 
@@ -251,8 +251,8 @@ best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
 
 best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
-save_object(best_params, "fredag", prefix = "best_params")
-save_object(best_xgb_params, "fredag", prefix = "best_xgb_params")
+save_object(best_params, "fredagsize50", prefix = "best_params")
+save_object(best_xgb_params, "fredagsize50", prefix = "best_xgb_params")
 
 #df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
 
@@ -277,8 +277,18 @@ final_xgb_fit  |>
   print(n = 50)
 
 
+inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad....stats..mad.train_df.target., train_df_stats$median....median.train_df.target.)
+
+
 
 ## predicitons ----
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit, inverse_prediction_transformation = inv_prediction_trans, data_transformation_function = function(x) {data_transform(x, T)})
+
+
+
+fit_on_all |> dplyr::filter(id %in% (test_df |> dplyr::select(id))$id) |> yardstick::rmse(target, pred)
+test_df |> dplyr::inner_join(fit_on_all, by="id") |> yardstick::rmse(target.x, target.y)
+extract_data_for_prediction(fit_on_all) |> save_results("fredagsize")
 
 
 
