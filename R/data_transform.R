@@ -13,13 +13,14 @@ data_transform <- function(
   if (test_data_bool == F) {
     t_median <- median(training_data$target)
     t_mad <- stats::mad(training_data$target)
-    training_data_initial_transform <- training_data |>
+    training_data <- training_data |>
       dplyr::mutate(
         target = asinh((target - t_median) / t_mad)
       )
   }
 
-  result <- training_data_initial_transform |>
+  # result <- training_data_initial_transform |>
+  result <- training_data |>
     tidyr::complete(
       market,
       delivery_start = seq(

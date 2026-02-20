@@ -10,9 +10,7 @@ t_mad <- stats::mad(training_data$target)
 
 library(KFAS)
 
-training_data_initial_transform <- data_transform(
-  training_data = training_data 
-)
+training_data_initial_transform <- data_transform(training_data)
 
 ## rsample::rolling_origin ----
 
@@ -260,9 +258,26 @@ training_data.f.notrans <- load_full_dataset()
 final_xgb_fit <- final_xgb_wf  |> 
   parsnip::fit(data = training_data.f)
 
+
 # alternativ på vores egen test data, så kan vi se hvad vi fanger
+# vi skal lave splits 
+set.seed(1)
+splits.cheat <- rsample::initial_time_split(
+  data = training_data.f,
+  prop = 0.85
+)
+train_df.cheat <- rsample::training(splits.cheat)
+test_df.cheat <- rsample::testing(splits.cheat)
+
+splits.cheat.notrans <- rsample::initial_time_split(
+  data = training_data.f.notrans,
+  prop = 0.85
+)
+train_df.cheat.notrans <- rsample::training(splits.cheat.notrans)
+test_df.cheat.notrans <- rsample::testing(splits.cheat.notrans)
+
 final_xgb_fit <- final_xgb_wf  |> 
-  parsnip::fit(data = train_df)
+  parsnip::fit(data = train_df.cheat)
 
 
 ### importance ----
@@ -278,11 +293,22 @@ final_xgb_fit  |>
 t_median <- median(training_data.f.notrans$target)
 t_mad <- stats::mad(training_data.f.notrans$target)
 
-
 predictions_asinh <- predict(
   final_xgb_fit, 
   new_data = test_data.f 
 )
+# til intern data
+t_median <- median(train_df.cheat.notrans$target)
+t_mad <- stats::mad(train_df.cheat.notrans$target)
+
+predictions_asinh.cheat <- predict(
+  final_xgb_fit, 
+  new_data = test_df.cheat
+)  
+final_pred_intern <- predictions_asinh.cheat  |> 
+  dplyr::mutate(
+    .pred = sinh(.pred) * t_mad + t_median
+  )
 
 # alternativ på vores egen test data, så kan vi se hvad vi fanger
 # predictions_asinh <- predict(
@@ -310,14 +336,14 @@ final_submission <- test_data.f  |>
 # ) + ggplot2::geom_line()
 
 # tjek qqplot ----
-library(ggplot2)
 
 # Vi samler data i en lille tibble til plottet
 qq_data <- data.frame(
-  actual = test_df$target,
-  predicted = final_submission$target
+  actual = test_df.cheat.notrans$target,
+  predicted = final_pred_intern$.pred
 )
 
+library(ggplot2)
 ggplot(qq_data, aes(sample = predicted)) +
   stat_qq(distribution = qt, dparams = list(df = 5)) + # Valgfrit: sammenlign med t-fordeling
   stat_qq_line() +
@@ -326,11 +352,14 @@ ggplot(qq_data, aes(sample = predicted)) +
   theme_minimal()
 
 actual_data <- data.frame(
-  id = test_df$id,
-  actual = test_df$target,
-  predicted = final_submission$target
-)
+  id = test_df.cheat.notrans$id,
+  actual = test_df.cheat.notrans$target,
+  predicted = qq_data$predicted
+)  
 ggplot2::ggplot(actual_data, ggplot2::aes(x = id)) + 
   ggplot2::geom_line( ggplot2::aes(y = actual, color = "black", alpha = 0.7, linetype = "dashed")) +  
   ggplot2::geom_line( ggplot2::aes(y = predicted, color = "red" ))   
 
+
+qq_data  |> 
+  yardstick::rmse(actual, predicted)
