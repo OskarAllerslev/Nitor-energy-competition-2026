@@ -25,6 +25,11 @@ library(modeltime.ensemble)
 ## EN ----
 final_glmnet_params <- readRDS(file = "inst/glmnet/model/lørdag_eftermiddagglmnet21-02-2026 15-39-37.rds")
 
+glmnet_spec <- parsnip::linear_reg(
+  penalty =tune::tune(),
+  mixture =tune::tune()
+) |> 
+  parsnip::set_engine("glmnet")
 
 glmnet_wf <- workflows::workflow()  |> 
   workflows::add_recipe(initial_recipe)  |> 
