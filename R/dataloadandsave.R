@@ -43,11 +43,16 @@ remove_target <- function(df) {
   df |> dplyr::select(-target)
 }
 
-fit_final_model_on_all_data <- function(model, inverse_prediction_transformation, data_transformation_function) {
-  inverse_vectorized <- Vectorize(inverse_prediction_transformation)
+
+prepare_data_for_prediction <- function(data_transformation_function) {
   training_data <- load_full_dataset() |> data_transformation_function() |> remove_target()
   prediction_data <- load_nitor_test_data() |> data_transformation_function()
-  full_df <- rbind(training_data, prediction_data)
+  rbind(training_data, prediction_data)
+}
+
+fit_final_model_on_all_data <- function(model, inverse_prediction_transformation, data_transformation_function) {
+  inverse_vectorized <- Vectorize(inverse_prediction_transformation)
+  full_df <- prepare_data_for_prediction(data_transformation_function)
   full_df |>
     dplyr::mutate(target = predict(model, new_data=full_df)$.pred) |>
     dplyr::mutate(target = inverse_vectorized(target))

@@ -1,5 +1,5 @@
 model_name <- "lørdag_morgen_godefeatures"
-sub_model_name <- "pit"
+sub_model_name <- "pitRandomTrainingSet"
 
 
 
@@ -7,7 +7,7 @@ sub_model_name <- "pit"
 training_data <- load_full_dataset()
 
 set.seed(1)
-splits <- rsample::initial_time_split(
+splits <- rsample::initial_split(
   data = training_data,
   prop = 0.85
 )
@@ -94,7 +94,7 @@ folds <- rsample::sliding_period(
   period = "day",
   lookback = 28,
   assess_stop = 1,
-  step = 2,
+  step = 3,
   skip = 0
 )
 
