@@ -1,5 +1,5 @@
 model_name <- "xgboost_lørdag_kl16"
-sub_model_name <- "større_assessment_pit"
+sub_model_name <- "størreslidingwindowkl1730"
 
 # opsætning af data ----
 training_data <- load_full_dataset()
@@ -91,11 +91,9 @@ folds <- rsample::sliding_period(
   data = train_df,
   index = delivery_start,
   period = "day",
-  lookback = 28,
-  assess_start = 1,
-  assess_stop = 14,
-  step = 7,
-  skip = 0
+  lookback = 365,
+  assess_stop = 90,
+  step = 30
 )
 
 initial_recipe <- recipes::recipe(
@@ -233,7 +231,7 @@ best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 save_object(best_params, model_name, prefix = glue::glue("best_params_{sub_model_name}"))
 save_object(best_xgb_params, model_name, prefix = glue::glue("best_xgb_params_{sub_model_name}"))
 
-df <- readRDS("./inst/xgboost_lørdag_kl16/model/best_params_større_assessment_pitxgboost_lørdag_kl1621-02-2026 16-29-47.rds")
+#df <- readRDS("./inst/xgboost_lørdag_kl16/model/best_params_større_assessment_pitxgboost_lørdag_kl1621-02-2026 16-29-47.rds")
 
 df <- best_params
 
