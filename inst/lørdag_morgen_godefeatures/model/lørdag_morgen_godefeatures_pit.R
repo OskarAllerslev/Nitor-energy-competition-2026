@@ -233,7 +233,7 @@ best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 save_object(best_params, model_name, prefix = glue::glue("best_params_{sub_model_name}"))
 save_object(best_xgb_params, model_name, prefix = glue::glue("best_xgb_params_{sub_model_name}"))
 
-#df <- readRDS("./inst/mandag_morgen_multisession_xgboost/model/best_paramsmandag_morgen_multisession_xgboost21-02-2026 11-56-41.rds")
+df <- readRDS("./inst/lørdag_morgen_godefeatures/model/best_params_pitRandomTrainingSetlørdag_morgen_godefeatures21-02-2026 15-29-34.rds")
 
 df <- best_params
 
