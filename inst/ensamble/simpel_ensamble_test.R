@@ -78,8 +78,8 @@ initial_recipe <- recipes::recipe(
     cycle_size = 365.25
   ) |>
   recipes::step_naomit(recipes::all_predictors()) |>
-  timetk::step_timeseries_signature(delivery_start)  |> 
-  recipes::step_rm(delivery_start) |>
+  # timetk::step_timeseries_signature(delivery_start)  |> 
+  # recipes::step_rm(delivery_start) |>
   recipes::step_rm(delivery_end)
 
 # initial_recipe  |> recipes::prep()  |> recipes::juice()
@@ -87,3 +87,72 @@ initial_recipe <- recipes::recipe(
 
 # make sub model ----
 library(modeltime)
+library(modeltime.ensemble)
+
+
+## prophet ----
+model_spec_prophet <- modeltime::prophet_reg()  |> 
+  parsnip::set_engine("prophet")
+
+wflw_fit_prophet <- workflows::workflow()  |> 
+  workflows::add_model(model_spec_prophet)   |> 
+  workflows::add_recipe(
+    initial_recipe  |> recipes::step_rm(recipes::all_predictors(), -delivery_start)
+  )  |> 
+  parsnip::fit(train_df)
+
+## EN ----
+model_spec_glmnet <- parsnip::linear_reg(
+  mixture = 0.9, 
+  penalty = 4.36e-6
+)  |> 
+  parsnip::set_engine("glmnet")
+
+wflw_fit_glmnet <- workflows::workflow()   |> 
+  workflows::add_model(model_spec_glmnet)  |> 
+  workflows::add_recipe(initial_recipe|>  recipes::step_rm(delivery_start))  |> 
+  parsnip::fit(train_df)
+
+
+
+# we make the ensemble ----
+models_tibble <- modeltime::modeltime_table(
+  wflw_fit_glmnet, 
+  wflw_fit_prophet
+)
+
+## make the ensemble ----
+ensemble_fit <- models_tibble  |> 
+  modeltime.ensemble::ensemble_average(type = "median")
+
+
+## calibration ----
+calibration_tbl <- modeltime::modeltime_table(
+  ensemble_fit
+)  |> 
+  modeltime::modeltime_calibrate(test_df)
+
+
+# accuracy ----
+calibration_tbl  |> 
+  modeltime::modeltime_accuracy()  |> 
+  modeltime::table_modeltime_accuracy(.interactive = F)
+
+
+preds <- calibration_tbl  |> 
+  modeltime::modeltime_forecast(
+    actual_data = train_df, 
+    new_data = test_df
+  )  |> 
+  modeltime::plot_modeltime_forecast()
+  dplyr::select(.index, .value, .model_desc, .key)
+
+
+preds_only <- preds  |> 
+  dplyr::filter(.key != "actual")  |> 
+  dplyr::select(.index, .value)
+
+# dette er underligt 
+
+preds_only  |> dplyr::filter(is.na(.value))
+
