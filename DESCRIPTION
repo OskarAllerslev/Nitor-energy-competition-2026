@@ -36,4 +36,5 @@ Imports:
     rugarch,
     bundle,
     modeltime,
-    modeltime.ensemble
+    modeltime.ensemble,
+    bestNormalize

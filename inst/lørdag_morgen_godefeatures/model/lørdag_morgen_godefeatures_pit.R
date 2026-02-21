@@ -46,13 +46,6 @@ data_transformation_to_use <- function (df) {
   return(result)
 }
 
-bounded_ecdf <- function(reference_vec) {
-  Vectorize(function (x) {
-    p <- ecdf(reference_vec)(x)
-    pmin(pmax(p, 1e-4), 1 - 1e-4)
-  })
-}
-
 
 
 # opsætning af data ----
@@ -74,14 +67,6 @@ splits <- rsample::initial_time_split(
 training_split <- rsample::training(splits)
 testing_split <- rsample::testing(splits)
 
-train_df_stats <- data.frame(
-  median = median(training_split$target),
-  mad = stats::mad(training_split$target)
-)
-train_df_test <- data.frame(
-  median <- median(testing_split$target),
-  mad <- stats::mad(testing_split$target)
-)
 train_df <- training_split  |>
   data_transformation_to_use()
 test_df <- testing_split  |>
@@ -136,7 +121,7 @@ initial_recipe <- recipes::recipe(
     frequency = 1,
     cycle_size = 365.25
   ) |>
-  recipes::step_mutate(target = qnorm(bounded_ecdf(target)(target))) |>
+  bestNormalize::step_orderNorm(target) |>
   recipes::step_rm(delivery_start) |>
   recipes::step_rm(delivery_end) |>
   recipes::step_naomit(recipes::all_predictors())
@@ -144,15 +129,15 @@ initial_recipe <- recipes::recipe(
 
 # test at alt er okay
 
-prepped_recipe <- recipes::prep(
-  initial_recipe,
-  training = train_df
-)
-
-transformed_train_data <- recipes::bake(
-  prepped_recipe,
-  new_data = NULL
-)
+# prepped_recipe <- recipes::prep(
+#   initial_recipe,
+#   training = train_df
+# )
+#
+# transformed_train_data <- recipes::bake(
+#   prepped_recipe,
+#   new_data = NULL
+# )
 
 
 # opsætning af model xgb ----
