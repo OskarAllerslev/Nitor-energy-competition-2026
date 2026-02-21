@@ -131,48 +131,96 @@ initial_recipe <- recipes::recipe(
 
 # model tuning ----
 # Sørg for at 'rules' er loaded, da den indeholder cubist_rules() og dens hyperparametre
-library(rules) 
+library(rules)
 library(tidymodels)
 
-set.seed(1) 
+set.seed(1)
 cv_folds <- rsample::vfold_cv(
-  train_df, 
-  v = 1 
+  train_df,
+  v = 2
 )
 
 # 1. Definer Cubist modellen
 # Vi tuner 'committees' og 'neighbors'
 library(rules)
 cubist_spec <- cubist_rules(
-  committees = tune::tune(), 
+  committees = tune::tune(),
   neighbors  = tune::tune()
-) |> 
-  parsnip::set_engine("Cubist") |> 
+) |>
+  parsnip::set_engine("Cubist") |>
   parsnip::set_mode("regression")
 
 # 2. Saml i et workflow
-cubist_wf <- workflows::workflow() |> 
-  workflows::add_recipe(initial_recipe) |> 
+cubist_wf <- workflows::workflow() |>
+  workflows::add_recipe(initial_recipe) |>
   workflows::add_model(cubist_spec)
 
 # 3. Lav grid
 # dials finder automatisk de rigtige ranges for committees (ofte 1-100) og neighbors (0-9)
 cubist_grid <- dials::grid_latin_hypercube(
-  rules::committees(), 
-  dials::neighbors(), 
+  rules::committees(),
+  dials::neighbors(),
   size = 1
 )
 
 # 4. Kør tuning
 # Bemærk: Cubist kan være lidt tungere at tune end glmnet, så dette kan tage et par minutter
 tune_res_cubist <- tune::tune_grid(
-  cubist_wf, 
-  resamples = cv_folds, 
-  grid      = cubist_grid 
+  cubist_wf,
+  resamples = cv_folds,
+  grid      = cubist_grid
 )
 
 # 5. Find bedste parametre og gem
 best_params_cubist <- tune::select_best(tune_res_cubist, metric = "rmse")
 
-# Genbruger din gemme-funktion
+
+
+
+
+
+
 save_object(best_params_cubist, "cubist", prefix = glue::glue("{sub_model_name}"))
+
+
+
+
+
+
+
+df <- best_params_cubist
+
+##  antag bedste params ----
+best_params_final <- head(df, n = 1)
+
+final_cubist_wf <- cubist_wf  |>
+  tune::finalize_workflow(best_params_final)
+
+
+## fit model på træningssættet ----
+set.seed(1)
+final_cubist_fit <- final_cubist_wf  |>
+  parsnip::fit(data = train_df)
+
+
+### importance ----
+final_cubist_fit  |>
+  workflows::extract_fit_parsnip()  |>
+  vip::vi(method = "model")  |>
+  print(n = 50)
+
+
+fit_on_all <- fit_final_model_on_all_data(model = final_cubist_fit,
+                                          inverse_prediction_transformation = function(x) {x},
+                                          data_transformation_function = function(x) {data_transformation_to_use(x, F)})
+
+
+fit_on_all <- fit_on_all |> dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
+
+extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_fit_subset(fit_on_all, training_split) |> yardstick::rmse(target.x, target.y)
+
+
+extract_data_for_prediction(fit_on_all) |> save_results(model_name, postfix = sub_model_name)
+
+
