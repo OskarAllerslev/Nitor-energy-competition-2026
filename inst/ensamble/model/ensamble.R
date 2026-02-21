@@ -101,15 +101,24 @@ calibration_tbl  |>
 
 
 all_data <- prepare_data_for_prediction(function(x) {data_transformation_to_use(x,F)})
+all_data_imp <- all_data  |> 
+  dplyr::mutate(
+    dplyr::across(
+      dplyr::where(is.numeric), ~ tidyr::replace_na(.x, median(.x, na.rm = T))
+    )
+  )
+
 
 preds <- calibration_tbl  |>
   modeltime::modeltime_forecast(
-    new_data = all_data
+    new_data = all_data_imp
   )
 
 all_data_transformed <- all_data |>
   dplyr::mutate(target = preds$.value) |>
-  dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
+  dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))  |> 
+  extract_data_for_prediction()  |> 
+  save_results(model_name = "ensamble", prefix = "45-8" )
 
 all_data_transformed |>
   extract_fit_subset(testing_split) |>
