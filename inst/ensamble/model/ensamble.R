@@ -42,7 +42,8 @@ glmnet_fit <- glmnet_wf  |>
   parsnip::fit(data = train_df)
 
 ## XGB ----
-final_xgb_params <- readRDS(file = "inst/lørdag_morgen_godefeatures/model/best_xgb_params_pitlørdag_morgen_godefeatures21-02-2026 14-28-10.rds")
+final_xgb_params <- readRDS(file = "./inst/xgboost_lørdag_kl16/model/best_params_større_assessment_pitxgboost_lørdag_kl1621-02-2026 16-29-47.rds")
+final_xgb_params <- head(final_xgb_params, n = 1)
 
 xgb_spec <- parsnip::boost_tree(
   trees = tune::tune(),
@@ -81,6 +82,7 @@ models_tibble <- modeltime::modeltime_table(
 
 ## make the ensemble ----
 ensemble_fit <- models_tibble  |>
+  # modeltime.ensemble::ensemble_weighted()
   modeltime.ensemble::ensemble_average(type = "median")
 
 
@@ -109,12 +111,16 @@ all_data_transformed <- all_data |>
   dplyr::mutate(target = preds$.value) |>
   dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
 
-  all_data_transformed |>
+all_data_transformed |>
   extract_fit_subset(testing_split) |>
   yardstick::rmse(target.x, target.y)
 
 
-actual_vs_pred <-   all_data_transformed  |> 
-  dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T)) |>
-  extract_fit_subset(testing_split)  |> 
-  dplyr::select(id, target.x, target.y)
+# ville lige plotte vores predictions
+plot_data <- all_data_transformed  |> 
+  extract_fit_subset(testing_split)
+
+ggplot2::ggplot(data = plot_data, mapping = ggplot2::aes(x = id)) +
+  ggplot2::geom_line(ggplot2::aes(y = target.x, color = "blue", alpha = 0.2)) +
+  ggplot2::geom_line(ggplot2::aes(y = target.y, color = "black")) 
+
