@@ -242,6 +242,8 @@ df <- best_params
 ##  antag bedste params ----
 best_params_final <- head(df, n = 1)
 
+library(modeltime)
+
 final_xgb_wf <- xgb_wf  |>
   tune::finalize_workflow(best_params_final)
 

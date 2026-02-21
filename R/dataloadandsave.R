@@ -45,9 +45,9 @@ remove_target <- function(df) {
 
 
 prepare_data_for_prediction <- function(data_transformation_function) {
-  training_data <- load_full_dataset() |> data_transformation_function() |> remove_target()
-  prediction_data <- load_nitor_test_data() |> data_transformation_function()
-  rbind(training_data, prediction_data)
+  training_data <- load_full_dataset() |> remove_target()
+  prediction_data <- load_nitor_test_data()
+  rbind(training_data, prediction_data) |> data_transformation_function()
 }
 
 fit_final_model_on_all_data <- function(model, inverse_prediction_transformation, data_transformation_function) {
