@@ -1,5 +1,57 @@
-model_name <- "fredag_aften_arima"
-data_transformation_to_use <- data_transform_v1
+model_name <- "lørdag_morgen_godefeatures"
+sub_model_name <- "pit"
+data_transformation_to_use <- function (df) {
+  result <- df |>
+    #Fill out missing market rows to make sure lags take from the correct time and don't go more hours back than desired.
+    tidyr::complete(
+      market,
+      delivery_start = seq(
+        from = min(delivery_start, na.rm = TRUE),
+        to = max(delivery_start, na.rm = TRUE),
+        by = "hour"
+      )
+    ) |>
+    dplyr::group_by(market) |>
+    dplyr::arrange(market, delivery_start) |>
+    dplyr::mutate(
+      residual_load = load_forecast - solar_forecast - wind_forecast,
+      residual_load_forecast_lag_24 = dplyr::lag(residual_load, n = 24),
+      residual_load_ma_6h = slider::slide_dbl(
+        .x = residual_load,
+        .f = mean,
+        .before = 6,
+        .complete = FALSE
+      ),
+      wind_dir_sin = sin(wind_direction_80m * (pi / 180)),
+      wind_dir_cos = cos(wind_direction_80m * (pi / 180)),
+      temp_index = pmax(0, wet_bulb_temperature_2m - 22) +
+        pmax(0, 18 - air_temperature_2m)
+    ) |>
+    dplyr::select(-c(wind_direction_80m,
+                     cloud_cover_low,
+                     cloud_cover_mid,
+                     cloud_cover_high,
+                     dew_point_temperature_2m,
+                     wet_bulb_temperature_2m,
+                     relative_humidity_2m,
+                     wind_gust_speed_10m,
+                     convective_inhibition,
+                     lifted_index))
+  result <- result |>
+    dplyr::arrange(id, delivery_start) |>
+    dplyr::ungroup()
+  result <- result |>
+    dplyr::filter(!is.na(id))
+
+  return(result)
+}
+
+bounded_ecdf <- function(reference_vec) {
+  Vectorize(function (x) {
+    p <- ecdf(reference_vec)(x)
+    pmin(pmax(p, 1e-4), 1 - 1e-4)
+  })
+}
 
 
 
@@ -9,7 +61,7 @@ training_data <- load_full_dataset()
 ## tilføj kalman filter ----
 
 
-training_data <- training_data |> dplyr::filter(delivery_start >= "2023-10-01")
+training_data <- training_data
 
 
 ## rsample::rolling_origin ----
@@ -27,8 +79,8 @@ train_df_stats <- data.frame(
   mad = stats::mad(training_split$target)
 )
 train_df_test <- data.frame(
-  median = median(testing_split$target),
-  mad = stats::mad(testing_split$target)
+  median <- median(testing_split$target),
+  mad <- stats::mad(testing_split$target)
 )
 train_df <- training_split  |>
   data_transformation_to_use()
@@ -38,15 +90,14 @@ test_df <- testing_split  |>
 
 
 # folds ----
-# TODO: Lav dem kumulative
 folds <- rsample::sliding_period(
   data = train_df,
   index = delivery_start,
   period = "day",
   lookback = 28,
   assess_stop = 1,
-  step = 30, #sæt til 1
-  skip = 27
+  step = 3,
+  skip = 0
 )
 
 initial_recipe <- recipes::recipe(
@@ -55,11 +106,10 @@ initial_recipe <- recipes::recipe(
   data = train_df
 ) |>
   recipes::update_role(id, new_role = "ID") |>
-  recipes::step_rm(wind_direction_80m) |>
   recipes::step_dummy(market, one_hot = TRUE) |>
   recipes::step_date(
     delivery_start,
-    features = c("dow", "month", "doy", "year"),
+    features = c("dow", "doy"),
     label = FALSE,
     keep_original_cols = TRUE
   ) |>
@@ -86,30 +136,43 @@ initial_recipe <- recipes::recipe(
     frequency = 1,
     cycle_size = 365.25
   ) |>
-  # recipes::step_rm(delivery_start) |>
-  recipes::step_naomit(recipes::all_predictors()) |>
-  recipes::step_rm(delivery_end)
+  recipes::step_mutate(target = qnorm(bounded_ecdf(target)(target))) |>
+  recipes::step_rm(delivery_start) |>
+  recipes::step_rm(delivery_end) |>
+  recipes::step_naomit(recipes::all_predictors())
+
+
+# test at alt er okay
+
+prepped_recipe <- recipes::prep(
+  initial_recipe,
+  training = train_df
+)
+
+transformed_train_data <- recipes::bake(
+  prepped_recipe,
+  new_data = NULL
+)
 
 
 # opsætning af model xgb ----
 
 
-xgb_spec <- modeltime::arima_boost(
-  # ARIMA parametre (lader vi stå tomme for at tvinge auto.arima)
-
-  # XGBoost hyperparametre
+xgb_spec <- parsnip::boost_tree(
   trees = tune::tune(),
   tree_depth = tune::tune(),
   min_n = tune::tune(),
-  mtry = tune::tune(),
-  learn_rate = tune::tune(),
+  loss_reduction = 0.001,
   sample_size = 0.7,
-  loss_reduction = 0.001
-) |>
+  mtry = tune::tune(),
+  learn_rate = tune::tune()
+)  |>
   parsnip::set_engine(
-    engine = "auto_arima_xgboost"
-    # nthread kan også sættes her via list(nthread = cores) i fremtiden
-  ) |>
+    "xgboost"#,
+    #nthread = 100
+    #tree_method = "gpu_hist",
+    # device = "cuda"
+  )  |>
   parsnip::set_mode("regression")
 
 
@@ -118,9 +181,6 @@ xgb_wf <- workflows::workflow()  |>
   workflows::add_recipe(initial_recipe)  |>
   workflows::add_model(xgb_spec)
 
-  # fjernet recency weights
-
-  # workflows::add_case_weights(recency_weight)  |>
 # parameterrum ----
 
 xgb_hyper_space <- dials::grid_latin_hypercube(
@@ -129,7 +189,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size =1
+  size = 10
 )
 
 # fit model ----
@@ -144,14 +204,12 @@ ctrl <- tune::control_grid(
   verbose = T,
   allow_par = T
 )
+
 set.seed(1)
 # options(future.globals.maxSize = Inf)
-cores <- parallel::detectCores() - 1
-# cl <- parallel::makePSOCKcluster(cores)
-# doParallel::registerDoParallel(cl)
+start.time <- Sys.time()
 
-future::plan(future::multisession, workers = cores)
-# future::plan(future::sequential)
+future::plan(future::multisession, workers = 15)
 xgb_tune_res <- tune::tune_grid(
   object = xgb_wf,
   resamples = folds,
@@ -159,9 +217,12 @@ xgb_tune_res <- tune::tune_grid(
   metrics = eval_metric,
   control = ctrl
 )
+future::plan(future::sequential)
 
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
 
-# parallel::stopCluster(cl)
 
 
 # se på de bedste hyperparametre ----
@@ -171,12 +232,12 @@ best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
 
 best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
-save_object(best_params, model_name, prefix = "best_params")
-save_object(best_xgb_params, model_name, prefix = "best_xgb_params")
+save_object(best_params, model_name, prefix = glue::glue("best_params_{sub_model_name}"))
+save_object(best_xgb_params, model_name, prefix = glue::glue("best_xgb_params_{sub_model_name}"))
 
-best_params <- readRDS("./inst/fredag_aften_arima/model/best_paramsfredag_aften_arima20-02-2026 20-34-02.rds")
+#df <- readRDS("./inst/mandag_morgen_multisession_xgboost/model/best_paramsmandag_morgen_multisession_xgboost21-02-2026 11-56-41.rds")
 
-# df <- best_params
+df <- best_params
 
 ##  antag bedste params ----
 best_params_final <- head(df, n = 1)
@@ -186,6 +247,7 @@ final_xgb_wf <- xgb_wf  |>
 
 
 ## fit model på træningssættet ----
+set.seed(1)
 final_xgb_fit <- final_xgb_wf  |>
   parsnip::fit(data = train_df)
 
@@ -196,52 +258,14 @@ final_xgb_fit  |>
   vip::vi(method = "model")  |>
   print(n = 50)
 
-
-
-
 inv_prediction_trans <- function(x) {x}
 
-
-my_trans <- function(x) {x |>
-    add_tail_covariates() |>
-    data_transformation_to_use()  }
 
 ## predicitons ----
 fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
                                           inverse_prediction_transformation = inv_prediction_trans,
-                                          data_transformation_function = my_trans)
-
+                                          data_transformation_function = data_transformation_to_use)
 
 extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
-extract_data_for_prediction(fit_on_all) |> save_results(model_name)
+extract_data_for_prediction(fit_on_all) |> save_results(model_name, postfix = sub_model_name)
 
-
-
-# tjek qqplot ----
-
-# Vi samler data i en lille tibble til plottet
-qq_data <- data.frame(
-  actual = testing_split$target,
-  predicted = extract_fit_subset(fit_on_all, testing_split)$target.x
-)
-
-library(ggplot2)
-ggplot(qq_data, aes(sample = predicted)) +
-  stat_qq(distribution = qt, dparams = list(df = 5)) + # Valgfrit: sammenlign med t-fordeling
-  stat_qq_line() +
-  labs(title = "QQ-plot: Model Predictions",
-       subtitle = "Sammenligning af prædikteret fordeling mod teoretisk fordeling") +
-  theme_minimal()
-
-actual_data <- data.frame(
-  id = (predictions_final |> dplyr::filter(id < 133627, id >= 112727))$id,
-  actual = qq_data$actual,
-  predicted = qq_data$predicted
-)
-ggplot2::ggplot(actual_data, ggplot2::aes(x = id)) +
-  ggplot2::geom_line( ggplot2::aes(y = actual, color = "black", alpha = 0.7, linetype = "dashed")) +
-  ggplot2::geom_line( ggplot2::aes(y = predicted, color = "red" ))
-
-
-qq_data  |>
-  yardstick::rmse(actual, predicted)

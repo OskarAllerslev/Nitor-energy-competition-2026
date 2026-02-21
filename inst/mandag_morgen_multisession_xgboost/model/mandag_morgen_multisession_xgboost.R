@@ -1,4 +1,4 @@
-model_name <- "fredag_aften_arima"
+model_name <- "mandag_morgen_multisession_xgboost"
 data_transformation_to_use <- data_transform_v1
 
 
@@ -9,7 +9,7 @@ training_data <- load_full_dataset()
 ## tilføj kalman filter ----
 
 
-training_data <- training_data |> dplyr::filter(delivery_start >= "2023-10-01")
+training_data <- training_data
 
 
 ## rsample::rolling_origin ----
@@ -27,8 +27,8 @@ train_df_stats <- data.frame(
   mad = stats::mad(training_split$target)
 )
 train_df_test <- data.frame(
-  median = median(testing_split$target),
-  mad = stats::mad(testing_split$target)
+  median <- median(testing_split$target),
+  mad <- stats::mad(testing_split$target)
 )
 train_df <- training_split  |>
   data_transformation_to_use()
@@ -86,7 +86,7 @@ initial_recipe <- recipes::recipe(
     frequency = 1,
     cycle_size = 365.25
   ) |>
-  # recipes::step_rm(delivery_start) |>
+  recipes::step_rm(delivery_start) |>
   recipes::step_naomit(recipes::all_predictors()) |>
   recipes::step_rm(delivery_end)
 
@@ -94,33 +94,30 @@ initial_recipe <- recipes::recipe(
 # opsætning af model xgb ----
 
 
-xgb_spec <- modeltime::arima_boost(
-  # ARIMA parametre (lader vi stå tomme for at tvinge auto.arima)
-
-  # XGBoost hyperparametre
+xgb_spec <- parsnip::boost_tree(
   trees = tune::tune(),
   tree_depth = tune::tune(),
   min_n = tune::tune(),
-  mtry = tune::tune(),
-  learn_rate = tune::tune(),
+  loss_reduction = 0.001,
   sample_size = 0.7,
-  loss_reduction = 0.001
-) |>
+  mtry = tune::tune(),
+  learn_rate = tune::tune()
+)  |>
   parsnip::set_engine(
-    engine = "auto_arima_xgboost"
-    # nthread kan også sættes her via list(nthread = cores) i fremtiden
-  ) |>
+    "xgboost"#,
+    #nthread = 100
+    #tree_method = "gpu_hist",
+    # device = "cuda"
+  )  |>
   parsnip::set_mode("regression")
 
 
 # workflow ----
 xgb_wf <- workflows::workflow()  |>
+  workflows::add_case_weights(recency_weight)  |>
   workflows::add_recipe(initial_recipe)  |>
   workflows::add_model(xgb_spec)
 
-  # fjernet recency weights
-
-  # workflows::add_case_weights(recency_weight)  |>
 # parameterrum ----
 
 xgb_hyper_space <- dials::grid_latin_hypercube(
@@ -129,7 +126,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size =1
+  size = 50
 )
 
 # fit model ----
@@ -144,14 +141,10 @@ ctrl <- tune::control_grid(
   verbose = T,
   allow_par = T
 )
+
 set.seed(1)
 # options(future.globals.maxSize = Inf)
-cores <- parallel::detectCores() - 1
-# cl <- parallel::makePSOCKcluster(cores)
-# doParallel::registerDoParallel(cl)
-
-future::plan(future::multisession, workers = cores)
-# future::plan(future::sequential)
+future::plan(future::multisession, workers = 15)
 xgb_tune_res <- tune::tune_grid(
   object = xgb_wf,
   resamples = folds,
@@ -161,7 +154,7 @@ xgb_tune_res <- tune::tune_grid(
 )
 
 
-# parallel::stopCluster(cl)
+future::plan(future::sequential)
 
 
 # se på de bedste hyperparametre ----
@@ -174,7 +167,7 @@ best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 save_object(best_params, model_name, prefix = "best_params")
 save_object(best_xgb_params, model_name, prefix = "best_xgb_params")
 
-best_params <- readRDS("./inst/fredag_aften_arima/model/best_paramsfredag_aften_arima20-02-2026 20-34-02.rds")
+df <- readRDS("./inst/mandag_morgen_multisession_xgboost/model/best_paramsmandag_morgen_multisession_xgboost21-02-2026 11-56-41.rds")
 
 # df <- best_params
 
@@ -186,6 +179,7 @@ final_xgb_wf <- xgb_wf  |>
 
 
 ## fit model på træningssættet ----
+set.seed(1)
 final_xgb_fit <- final_xgb_wf  |>
   parsnip::fit(data = train_df)
 
@@ -199,18 +193,97 @@ final_xgb_fit  |>
 
 
 
-inv_prediction_trans <- function(x) {x}
 
 
-my_trans <- function(x) {x |>
-    add_tail_covariates() |>
-    data_transformation_to_use()  }
+inv_prediction_trans <- inv_asinh_trans(train_df_stats$mad, train_df_stats$median)
+
 
 ## predicitons ----
+my_trans <- function(x) {x |>
+    data_transformation_to_use(T)  }
+
+
 fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
                                           inverse_prediction_transformation = inv_prediction_trans,
                                           data_transformation_function = my_trans)
 
+extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_data_for_prediction(fit_on_all) |> save_results(model_name)
+
+
+## fit on full data set
+
+fulldata_df <- load_full_dataset() |> data_transformation_to_use()
+
+full_stats <- data.frame(
+  median = median(fulldata_df$target),
+  mad = stats::mad(fulldata_df$target)
+)
+
+
+final_xgb_fit <- final_xgb_wf  |>
+  parsnip::fit(data = fulldata_df)
+
+
+### importance ----
+final_xgb_fit  |>
+  workflows::extract_fit_parsnip()  |>
+  vip::vi(method = "model")  |>
+  print(n = 50)
+
+
+
+inv_prediction_trans <- inv_asinh_trans(full_stats$mad, full_stats$median)
+
+
+## predicitons ----
+my_trans <- function(x) {x |>
+    data_transformation_to_use(T)  }
+
+
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
+                                          inverse_prediction_transformation = inv_prediction_trans,
+                                          data_transformation_function = my_trans)
+
+extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_data_for_prediction(fit_on_all) |> save_results(model_name)
+
+
+
+
+## fit on 2023 october and forward data set
+
+fulldata_df <- rbind(training_split, testing_split) |> data_transformation_to_use()
+
+full_stats <- data.frame(
+  median = median(fulldata_df$target),
+  mad = stats::mad(fulldata_df$target)
+)
+
+
+final_xgb_fit <- final_xgb_wf  |>
+  parsnip::fit(data = fulldata_df)
+
+
+### importance ----
+final_xgb_fit  |>
+  workflows::extract_fit_parsnip()  |>
+  vip::vi(method = "model")  |>
+  print(n = 50)
+
+
+
+inv_prediction_trans <- inv_asinh_trans(full_stats$mad, full_stats$median)
+
+
+## predicitons ----
+my_trans <- function(x) {x |>
+    data_transformation_to_use(T)  }
+
+
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
+                                          inverse_prediction_transformation = inv_prediction_trans,
+                                          data_transformation_function = my_trans)
 
 extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
 extract_data_for_prediction(fit_on_all) |> save_results(model_name)
