@@ -130,3 +130,49 @@ initial_recipe <- recipes::recipe(
 
 
 # model tuning ----
+# Sørg for at 'rules' er loaded, da den indeholder cubist_rules() og dens hyperparametre
+library(rules) 
+library(tidymodels)
+
+set.seed(1) 
+cv_folds <- rsample::vfold_cv(
+  train_df, 
+  v = 10 
+)
+
+# 1. Definer Cubist modellen
+# Vi tuner 'committees' og 'neighbors'
+library(rules)
+cubist_spec <- cubist_rules(
+  committees = tune::tune(), 
+  neighbors  = tune::tune()
+) |> 
+  parsnip::set_engine("Cubist") |> 
+  parsnip::set_mode("regression")
+
+# 2. Saml i et workflow
+cubist_wf <- workflows::workflow() |> 
+  workflows::add_recipe(initial_recipe) |> 
+  workflows::add_model(cubist_spec)
+
+# 3. Lav grid
+# dials finder automatisk de rigtige ranges for committees (ofte 1-100) og neighbors (0-9)
+cubist_grid <- dials::grid_latin_hypercube(
+  rules::committees(), 
+  dials::neighbors(), 
+  size = 25
+)
+
+# 4. Kør tuning
+# Bemærk: Cubist kan være lidt tungere at tune end glmnet, så dette kan tage et par minutter
+tune_res_cubist <- tune::tune_grid(
+  cubist_wf, 
+  resamples = cv_folds, 
+  grid      = cubist_grid 
+)
+
+# 5. Find bedste parametre og gem
+best_params_cubist <- tune::select_best(tune_res_cubist, metric = "rmse")
+
+# Genbruger din gemme-funktion
+save_object(best_params_cubist, "cubist", prefix = glue::glue("{sub_model_name}"))

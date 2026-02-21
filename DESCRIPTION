@@ -38,4 +38,5 @@ Imports:
     modeltime,
     modeltime.ensemble,
     bestNormalize,
-    rules
+    rules,
+    Cubist
