@@ -137,7 +137,7 @@ library(tidymodels)
 set.seed(1) 
 cv_folds <- rsample::vfold_cv(
   train_df, 
-  v = 10 
+  v = 1 
 )
 
 # 1. Definer Cubist modellen
@@ -160,7 +160,7 @@ cubist_wf <- workflows::workflow() |>
 cubist_grid <- dials::grid_latin_hypercube(
   rules::committees(), 
   dials::neighbors(), 
-  size = 25
+  size = 1
 )
 
 # 4. Kør tuning

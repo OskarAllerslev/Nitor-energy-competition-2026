@@ -130,7 +130,6 @@ initial_recipe <- recipes::recipe(
 
 
 # model tuning ----
-
 set.seed(1) 
 cv_folds <- rsample::vfold_cv(
   train_df, 
