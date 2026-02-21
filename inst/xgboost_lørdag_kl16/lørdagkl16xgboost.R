@@ -1,5 +1,5 @@
 model_name <- "xgboost_lørdag_kl16"
-sub_model_name <- "større_assessment"
+sub_model_name <- "større_assessment_pit"
 
 # opsætning af data ----
 training_data <- load_full_dataset()
@@ -13,13 +13,13 @@ training_split <- rsample::training(splits)
 testing_split <- rsample::testing(splits)
 
 
-# train_targets <- training_split$target
+train_targets <- training_split$target
 
 # inv_prediction_trans <- function(x) { quantile(train_targets, probs= pnorm(x), na.rm=TRUE)}
 
 
-# data_transformation_to_use <- function (df, modifyTarget = T) {
-data_transformation_to_use <- function (df) {
+data_transformation_to_use <- function (df, modifyTarget = T) {
+# data_transformation_to_use <- function (df) {
 
 
 
@@ -61,15 +61,15 @@ data_transformation_to_use <- function (df) {
                      convective_inhibition,
                      lifted_index))
 
-  # if(modifyTarget) {
-  #   the_ecdf <- ecdf(train_targets)
-  #   bounded_ecdf <- function(x) {
-  #     p <- the_ecdf(x)
-  #     pmin(pmax(p, 1e-4), 1 - 1e-4)
-  #   }
-  #
-  #   result <- result |> dplyr::mutate(target = qnorm(bounded_ecdf(target)))
-  # }
+  if(modifyTarget) {
+    the_ecdf <- ecdf(train_targets)
+    bounded_ecdf <- function(x) {
+      p <- the_ecdf(x)
+      pmin(pmax(p, 1e-4), 1 - 1e-4)
+    }
+
+    result <- result |> dplyr::mutate(target = qnorm(bounded_ecdf(target)))
+  }
   result <- result |>
     dplyr::arrange(id, delivery_start) |>
     dplyr::ungroup()
@@ -94,7 +94,7 @@ folds <- rsample::sliding_period(
   lookback = 28,
   assess_start = 1,
   assess_stop = 14,
-  step = 14,
+  step = 7,
   skip = 0
 )
 
@@ -262,12 +262,27 @@ final_xgb_fit  |>
 ## predicitons ----
 fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
                                           inverse_prediction_transformation = function(x) {x},
-                                          data_transformation_function = data_transformation_to_use)
+                                          data_transformation_function = function(x) {data_transformation_to_use(x, F)})
 
 
-#fit_on_all <- fit_on_all |> dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
+fit_on_all <- fit_on_all |> dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
 
 extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
 extract_fit_subset(fit_on_all, training_split) |> yardstick::rmse(target.x, target.y)
+
+
+# full fit
+
+set.seed(1)
+final_xgb_fit_full <- final_xgb_wf  |>
+  parsnip::fit(data = training_data |> data_transformation_to_use())
+
+fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
+                                          inverse_prediction_transformation = function(x) {x},
+                                          data_transformation_function = function(x) {data_transformation_to_use(x, F)})
 extract_data_for_prediction(fit_on_all) |> save_results(model_name, postfix = sub_model_name)
+
+
+
+
 
