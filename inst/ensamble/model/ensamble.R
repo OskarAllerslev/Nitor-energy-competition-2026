@@ -23,22 +23,22 @@ library(modeltime.ensemble)
 #   parsnip::fit(train_df)
 
 ## EN ----
-model_spec_glmnet <- parsnip::linear_reg(
-  mixture = 0.9,
-  penalty = 4.36e-6
-)  |>
-  parsnip::set_engine("glmnet")
+final_glmnet_params <- readRDS(file = "inst/glmnet/model/lørdag_eftermiddagglmnet21-02-2026 15-39-37.rds")
 
-wflw_fit_glmnet <- workflows::workflow()   |>
-  workflows::add_model(model_spec_glmnet)  |>
-  workflows::add_recipe(initial_recipe)  |>
-  parsnip::fit(train_df)
+
+glmnet_wf <- workflows::workflow()  |> 
+  workflows::add_recipe(initial_recipe)  |> 
+  workflows::add_model(glmnet_spec)  |> 
+  tune::finalize_workflow(parameters = final_glmnet_params)
+
+glmnet_fit <- glmnet_wf  |> 
+  parsnip::fit(data = train_df)
 
 
 
 # we make the ensemble ----
 models_tibble <- modeltime::modeltime_table(
-  wflw_fit_glmnet,
+  glmnet_fit,
   # wflw_fit_prophet,
   final_xgb_fit
 )

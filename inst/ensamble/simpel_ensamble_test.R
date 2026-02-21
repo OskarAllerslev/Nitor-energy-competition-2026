@@ -139,18 +139,12 @@ calibration_tbl  |>
   modeltime::table_modeltime_accuracy(.interactive = F)
 
 
+
 preds <- calibration_tbl  |> 
   modeltime::modeltime_forecast(
     actual_data = train_df, 
     new_data = test_df
-  )  |> 
-  modeltime::plot_modeltime_forecast()
-  dplyr::select(.index, .value, .model_desc, .key)
-
-
-preds_only <- preds  |> 
-  dplyr::filter(.key != "actual")  |> 
-  dplyr::select(.index, .value)
+  )  
 
 # dette er underligt 
 
