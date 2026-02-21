@@ -8,7 +8,7 @@ sub_model_name <- "lørdag_eftermiddag"
 training_data <- load_full_dataset()
 
 set.seed(1)
-splits <- rsample::initial_split(
+splits <- rsample::initial_time_split(
   data = training_data,
   prop = 0.85
 )
@@ -168,3 +168,6 @@ best_params <- tune::select_best(tune_res, metric = "rmse")
 
 
 save_object(best_params, model_name, prefix = glue::glue("{sub_model_name}"))
+
+
+
