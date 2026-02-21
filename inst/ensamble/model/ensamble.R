@@ -1,3 +1,5 @@
+
+
 final_xgb <- final_xgb_fit
 
 
@@ -23,7 +25,7 @@ library(modeltime.ensemble)
 #   parsnip::fit(train_df)
 
 ## EN ----
-final_glmnet_params <- readRDS(file = "inst/glmnet/model/lørdag_eftermiddagglmnet21-02-2026 15-39-37.rds")
+final_glmnet_params <- readRDS(file = "inst/glmnet/model/lørdag_eftermiddagglmnet21-02-2026 16-11-42.rds")
 
 glmnet_spec <- parsnip::linear_reg(
   penalty =tune::tune(),
@@ -39,17 +41,48 @@ glmnet_wf <- workflows::workflow()  |>
 glmnet_fit <- glmnet_wf  |>
   parsnip::fit(data = train_df)
 
+## XGB ----
+final_xgb_params <- readRDS(file = "./inst/xgboost_lørdag_kl16/model/best_params_større_assessment_pitxgboost_lørdag_kl1621-02-2026 16-29-47.rds")
+final_xgb_params <- head(final_xgb_params, n = 1)
+
+xgb_spec <- parsnip::boost_tree(
+  trees = tune::tune(),
+  tree_depth = tune::tune(),
+  min_n = tune::tune(),
+  loss_reduction = 0.001,
+  sample_size = 0.7,
+  mtry = tune::tune(),
+  learn_rate = tune::tune()
+)  |>
+  parsnip::set_engine(
+    "xgboost"#,
+    #nthread = 100
+    #tree_method = "gpu_hist",
+    # device = "cuda"
+  )  |>
+  parsnip::set_mode("regression")
+
+xgb_wf <- workflows::workflow()  |>
+  workflows::add_recipe(initial_recipe)  |>
+  workflows::add_model(xgb_spec)  |> 
+  tune::finalize_workflow(final_xgb_params)
+
+xgb_fit <- xgb_wf  |>
+  parsnip::fit(data = train_df)
+
 
 
 # we make the ensemble ----
 models_tibble <- modeltime::modeltime_table(
   glmnet_fit,
+  # glmnet_fit
   # wflw_fit_prophet,
-  final_xgb_fit
+  xgb_fit
 )
 
 ## make the ensemble ----
 ensemble_fit <- models_tibble  |>
+  # modeltime.ensemble::ensemble_weighted()
   modeltime.ensemble::ensemble_average(type = "median")
 
 
@@ -78,15 +111,16 @@ all_data_transformed <- all_data |>
   dplyr::mutate(target = preds$.value) |>
   dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
 
-  all_data_transformed |>
+all_data_transformed |>
   extract_fit_subset(testing_split) |>
   yardstick::rmse(target.x, target.y)
 
 
-preds_only <- preds  |>
-  dplyr::filter(.key != "actual")  |>
-  dplyr::select(.index, .value)
+# ville lige plotte vores predictions
+plot_data <- all_data_transformed  |> 
+  extract_fit_subset(testing_split)
 
-# dette er underligt
+ggplot2::ggplot(data = plot_data, mapping = ggplot2::aes(x = id)) +
+  ggplot2::geom_line(ggplot2::aes(y = target.x, color = "blue", alpha = 0.2)) +
+  ggplot2::geom_line(ggplot2::aes(y = target.y, color = "black")) 
 
-preds_only  |> dplyr::filter(is.na(.value))
