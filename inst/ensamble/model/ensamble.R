@@ -28,15 +28,15 @@ final_glmnet_params <- readRDS(file = "inst/glmnet/model/lørdag_eftermiddagglmn
 glmnet_spec <- parsnip::linear_reg(
   penalty =tune::tune(),
   mixture =tune::tune()
-) |> 
+) |>
   parsnip::set_engine("glmnet")
 
-glmnet_wf <- workflows::workflow()  |> 
-  workflows::add_recipe(initial_recipe)  |> 
-  workflows::add_model(glmnet_spec)  |> 
+glmnet_wf <- workflows::workflow()  |>
+  workflows::add_recipe(initial_recipe)  |>
+  workflows::add_model(glmnet_spec)  |>
   tune::finalize_workflow(parameters = final_glmnet_params)
 
-glmnet_fit <- glmnet_wf  |> 
+glmnet_fit <- glmnet_wf  |>
   parsnip::fit(data = train_df)
 
 
@@ -74,9 +74,11 @@ preds <- calibration_tbl  |>
     new_data = all_data
   )
 
-all_data_transformed <- all_data |> dplyr::mutate(target = preds$.value) |>
+all_data_transformed <- all_data |>
+  dplyr::mutate(target = preds$.value) |>
+  dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
 
-  dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T)) |>
+  all_data_transformed |>
   extract_fit_subset(testing_split) |>
   yardstick::rmse(target.x, target.y)
 
