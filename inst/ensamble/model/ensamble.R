@@ -81,9 +81,42 @@ models_tibble <- modeltime::modeltime_table(
 )
 
 ## make the ensemble ----
+acc_tbl <- modeltime::modeltime_accuracy(
+  calibration_tbl
+)
+
+# vi laver en model til at væglge vægtene 
+# fast_resample <- modeltime.resample::time_series_cv(
+#   data = train_df,
+#   date_var = delivery_start,
+#   initial = "2 years", 
+#   assess = "3 months", 
+#   slice_limit = 1
+# )
+# fast_resamples_fitted <- models_tibble  |> 
+#   modeltime.resample::modeltime_fit_resamples(
+#     resamples = fast_resample, 
+#     control = tune::control_resamples()
+#   )
+
+# meta_model <- parsnip::linear_reg(penalty = 0.01, mixture = 1)  |> 
+#   parsnip::set_engine("glmnet")
+
+# ensemble_fit <- fast_resamples_fitted |> 
+#   modeltime.ensemble::ensemble_model_spec(
+#     model_spec = meta_model, 
+#     control = tune::control_grid()
+#   )
+
+# tmp <- ensemble_fit  |> 
+#   modeltime.ensemble::ensemble_average()
+
+
+
 ensemble_fit <- models_tibble  |>
-  # modeltime.ensemble::ensemble_weighted()
+  modeltime.ensemble::ensemble_weighted()
   modeltime.ensemble::ensemble_average(type = "median")
+
 
 
 ## calibration ----
