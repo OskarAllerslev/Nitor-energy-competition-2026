@@ -1,5 +1,5 @@
-model_name <- "lørdag_morgen_godefeatures"
-sub_model_name <- "pitRandomTrainingSet"
+model_name <- "arima_models"
+sub_model_name <- "arima_lørdag"
 
 
 
@@ -63,13 +63,13 @@ data_transformation_to_use <- function (df, modifyTarget = T) {
                      lifted_index))
 
   if(modifyTarget) {
-  the_ecdf <- ecdf(train_targets)
-  bounded_ecdf <- function(x) {
-    p <- the_ecdf(x)
-    pmin(pmax(p, 1e-4), 1 - 1e-4)
-  }
+    the_ecdf <- ecdf(train_targets)
+    bounded_ecdf <- function(x) {
+      p <- the_ecdf(x)
+      pmin(pmax(p, 1e-4), 1 - 1e-4)
+    }
 
-  result <- result |> dplyr::mutate(target = qnorm(bounded_ecdf(target)))
+    result <- result |> dplyr::mutate(target = qnorm(bounded_ecdf(target)))
   }
   result <- result |>
     dplyr::arrange(id, delivery_start) |>
@@ -155,21 +155,22 @@ initial_recipe <- recipes::recipe(
 # opsætning af model xgb ----
 
 
-xgb_spec <- parsnip::boost_tree(
+xgb_spec <- modeltime::arima_boost(
+  # ARIMA parametre (lader vi stå tomme for at tvinge auto.arima)
+
+  # XGBoost hyperparametre
   trees = tune::tune(),
   tree_depth = tune::tune(),
   min_n = tune::tune(),
-  loss_reduction = 0.001,
-  sample_size = 0.7,
   mtry = tune::tune(),
-  learn_rate = tune::tune()
-)  |>
+  learn_rate = tune::tune(),
+  sample_size = 0.7,
+  loss_reduction = 0.001
+) |>
   parsnip::set_engine(
-    "xgboost"#,
-    #nthread = 100
-    #tree_method = "gpu_hist",
-    # device = "cuda"
-  )  |>
+    engine = "auto_arima_xgboost"
+    # nthread kan også sættes her via list(nthread = cores) i fremtiden
+  ) |>
   parsnip::set_mode("regression")
 
 
