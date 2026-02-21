@@ -268,5 +268,6 @@ fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
 fit_on_all <- fit_on_all |> dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
 
 extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_fit_subset(fit_on_all, training_split) |> yardstick::rmse(target.x, target.y)
 extract_data_for_prediction(fit_on_all) |> save_results(model_name, postfix = sub_model_name)
 
