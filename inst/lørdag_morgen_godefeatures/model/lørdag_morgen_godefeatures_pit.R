@@ -1,11 +1,27 @@
 model_name <- "lørdag_morgen_godefeatures"
 sub_model_name <- "pit"
-data_transformation_to_use <- function (df) {
-  the_ecdf <- ecdf(df$target)
-  bounded_ecdf <- function(x) {
-    p <- the_ecdf(x)
-    pmin(pmax(p, 1e-4), 1 - 1e-4)
-  }
+
+
+
+# opsætning af data ----
+training_data <- load_full_dataset()
+
+set.seed(1)
+splits <- rsample::initial_time_split(
+  data = training_data,
+  prop = 0.85
+)
+training_split <- rsample::training(splits)
+testing_split <- rsample::testing(splits)
+
+
+train_targets <- training_split$target
+
+inv_prediction_trans <- function(x) { quantile(train_targets, probs= pnorm(x), na.rm=TRUE)}
+
+
+data_transformation_to_use <- function (df, modifyTarget = T) {
+
 
 
 
@@ -46,7 +62,15 @@ data_transformation_to_use <- function (df) {
                      convective_inhibition,
                      lifted_index))
 
+  if(modifyTarget) {
+  the_ecdf <- ecdf(train_targets)
+  bounded_ecdf <- function(x) {
+    p <- the_ecdf(x)
+    pmin(pmax(p, 1e-4), 1 - 1e-4)
+  }
+
   result <- result |> dplyr::mutate(target = qnorm(bounded_ecdf(target)))
+  }
   result <- result |>
     dplyr::arrange(id, delivery_start) |>
     dplyr::ungroup()
@@ -55,27 +79,6 @@ data_transformation_to_use <- function (df) {
 
   return(result)
 }
-
-
-
-# opsætning af data ----
-training_data <- load_full_dataset()
-
-## tilføj kalman filter ----
-
-
-training_data <- training_data
-
-
-## rsample::rolling_origin ----
-
-set.seed(1)
-splits <- rsample::initial_time_split(
-  data = training_data,
-  prop = 0.85
-)
-training_split <- rsample::training(splits)
-testing_split <- rsample::testing(splits)
 
 train_df <- training_split  |>
   data_transformation_to_use()
@@ -91,7 +94,7 @@ folds <- rsample::sliding_period(
   period = "day",
   lookback = 28,
   assess_stop = 1,
-  step = 3,
+  step = 2,
   skip = 0
 )
 
@@ -183,7 +186,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size = 1
+  size = 20
 )
 
 # fit model ----
@@ -226,6 +229,7 @@ best_params <- tune::show_best(xgb_tune_res, metric = "rmse")
 
 best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 
+#save_object(xgb_tune_res, model_name, prefix = glue::glue("tune_res_{sub_model_name}"))
 save_object(best_params, model_name, prefix = glue::glue("best_params_{sub_model_name}"))
 save_object(best_xgb_params, model_name, prefix = glue::glue("best_xgb_params_{sub_model_name}"))
 
@@ -252,13 +256,16 @@ final_xgb_fit  |>
   vip::vi(method = "model")  |>
   print(n = 50)
 
-inv_prediction_trans <- function(x) {x}
+
 
 
 ## predicitons ----
 fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
-                                          inverse_prediction_transformation = inv_prediction_trans,
-                                          data_transformation_function = data_transformation_to_use)
+                                          inverse_prediction_transformation = function(x) {x},
+                                          data_transformation_function = function(x) {x |> data_transformation_to_use(modifyTarget = F)})
+
+
+fit_on_all <- fit_on_all |> dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
 
 extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
 extract_data_for_prediction(fit_on_all) |> save_results(model_name, postfix = sub_model_name)
