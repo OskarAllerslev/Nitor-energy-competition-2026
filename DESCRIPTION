@@ -35,4 +35,5 @@ Imports:
     glue,
     rugarch,
     bundle,
-    modeltime
+    modeltime,
+    modeltime.ensemble
