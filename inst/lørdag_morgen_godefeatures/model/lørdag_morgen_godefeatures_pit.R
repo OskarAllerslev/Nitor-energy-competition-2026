@@ -1,6 +1,14 @@
 model_name <- "lørdag_morgen_godefeatures"
 sub_model_name <- "pit"
 data_transformation_to_use <- function (df) {
+  the_ecdf <- ecdf(df$target)
+  bounded_ecdf <- function(x) {
+    p <- the_ecdf(x)
+    pmin(pmax(p, 1e-4), 1 - 1e-4)
+  }
+
+
+
   result <- df |>
     #Fill out missing market rows to make sure lags take from the correct time and don't go more hours back than desired.
     tidyr::complete(
@@ -37,6 +45,8 @@ data_transformation_to_use <- function (df) {
                      wind_gust_speed_10m,
                      convective_inhibition,
                      lifted_index))
+
+  result <- result |> dplyr::mutate(target = qnorm(bounded_ecdf(target)))
   result <- result |>
     dplyr::arrange(id, delivery_start) |>
     dplyr::ungroup()
@@ -121,7 +131,6 @@ initial_recipe <- recipes::recipe(
     frequency = 1,
     cycle_size = 365.25
   ) |>
-  bestNormalize::step_orderNorm(target) |>
   recipes::step_rm(delivery_start) |>
   recipes::step_rm(delivery_end) |>
   recipes::step_naomit(recipes::all_predictors())
@@ -174,7 +183,7 @@ xgb_hyper_space <- dials::grid_latin_hypercube(
   dials::min_n(range = c(15L, 100L)),
   dials::mtry(range = c(10L, 35L)),
   dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-  size = 10
+  size = 1
 )
 
 # fit model ----
