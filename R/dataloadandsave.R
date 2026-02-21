@@ -36,7 +36,7 @@ save_object <- function(objectToSave, model_name, prefix = "", postfix = "") {
   dirpath <- glue::glue("./inst/{model_name}/model/")
   path <- glue::glue("{dirpath}{prefix}{model_name}{timestamp}{postfix}.rds")
   dir.create(dirpath, showWarnings = TRUE, recursive = TRUE)
-  saveRDS(data, file = path)
+  saveRDS(objectToSave, file = path)
 }
 
 remove_target <- function(df) {

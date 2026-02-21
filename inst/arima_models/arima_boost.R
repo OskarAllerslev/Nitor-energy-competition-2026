@@ -174,9 +174,9 @@ best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 save_object(best_params, model_name, prefix = "best_params")
 save_object(best_xgb_params, model_name, prefix = "best_xgb_params")
 
-#df <- readRDS("./inst/torsdag_aften/model/best_params.rds")
+best_params <- readRDS("./inst/fredag_aften_arima/model/best_paramsfredag_aften_arima20-02-2026 20-34-02.rds")
 
-df <- best_params
+# df <- best_params
 
 ##  antag bedste params ----
 best_params_final <- head(df, n = 1)
