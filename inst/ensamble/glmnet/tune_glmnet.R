@@ -10,7 +10,7 @@ training_data <- load_full_dataset()
 set.seed(1)
 splits <- rsample::initial_time_split(
   data = training_data,
-  prop = 0.85
+  prop = 0.95
 )
 training_split <- rsample::training(splits)
 testing_split <- rsample::testing(splits)
@@ -134,7 +134,7 @@ initial_recipe <- recipes::recipe(
 set.seed(1) 
 cv_folds <- rsample::vfold_cv(
   train_df, 
-  v = 5
+  v = 10 
 )
 
 glmnet_spec <- parsnip::linear_reg(
@@ -168,6 +168,8 @@ best_params <- tune::select_best(tune_res, metric = "rmse")
 
 
 save_object(best_params, model_name, prefix = glue::glue("{sub_model_name}"))
+
+
 
 
 
