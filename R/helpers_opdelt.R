@@ -1,6 +1,6 @@
-get_train_df <- function (MARKED = "Market A", training_split) {
+get_train_df <- function (MARKED = "Market A", training_split, variance_damping = T) {
   split <- training_split |> dplyr::filter(market == MARKED)
-  final_data_transformation(split)(split)
+  final_data_transformation(split)(split, variance_damping)
 }
 
 
@@ -78,6 +78,7 @@ finalize_workflow_helper <- function(
   xgb_wf_final <- workflow |>
     tune::finalize_workflow(best_params)
 
+  set.seed(1)
   res <- final_xgb_fit <- xgb_wf_final |>
     parsnip::fit(data = train_df)
   return(res)
@@ -88,13 +89,14 @@ xgb_opdelt_market <- function(
   sub_model_name = "",
   training_split,
   wrks = 1,
-  step = 5
+  step = 5,
+  variance_damping
 ) {
   # preopsætning----
   model_name <- glue::glue("xgb_", MARKED)
   # opsætning af data ----
 
-  train_df <- get_train_df(MARKED = MARKED, training_split = training_split)
+  train_df <- get_train_df(MARKED = MARKED, training_split = training_split, variance_damping = variance_damping)
 
   # recipie ----
 
