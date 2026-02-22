@@ -158,11 +158,4 @@ all_data_transformed |>
   yardstick::rmse(target.x, target.y)
 
 
-# ville lige plotte vores predictions
-plot_data <- all_data_transformed  |> 
-  extract_fit_subset(testing_split)
-
-ggplot2::ggplot(data = plot_data, mapping = ggplot2::aes(x = id)) +
-  ggplot2::geom_line(ggplot2::aes(y = target.x, color = "blue", alpha = 0.2)) +
-  ggplot2::geom_line(ggplot2::aes(y = target.y, color = "black")) 
 
