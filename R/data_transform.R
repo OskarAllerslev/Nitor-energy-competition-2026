@@ -150,14 +150,34 @@ final_data_transformation <- function(training_split) {
     dplyr::group_by(market) |>
     dplyr::arrange(market, delivery_start) |>
     dplyr::mutate(
+      air_density          = (surface_pressure * 100) / (287.05 * (air_temperature_2m + 273.15)),
+      air_density_lag_1 = dplyr::lag(air_density, n = 1),
+      air_density_lag_24 = dplyr::lag(air_density, n = 24),
+      air_density_ma_6h = slider::slide_dbl(
+        .x = air_density,
+        .f = mean,
+        .before = 6,
+        .complete = FALSE
+      ),
+      wind_speed_80m_lag_1 = dplyr::lag(wind_speed_80m, n = 1),
+      wind_speed_80m_lag_24 = dplyr::lag(wind_speed_80m, n = 1),
+      wind_speed_80m_ma_6h = slider::slide_dbl(
+        .x = wind_speed_80m,
+        .f = mean,
+        .before = 6,
+        .complete = FALSE
+      ),
       residual_load = load_forecast - solar_forecast - wind_forecast,
+      residual_load_forecast_lag_1 = dplyr::lag(residual_load, n = 1),
       residual_load_forecast_lag_24 = dplyr::lag(residual_load, n = 24),
+      residual_load_forecast_lag_48 = dplyr::lag(residual_load, n = 48),
       residual_load_ma_6h = slider::slide_dbl(
         .x = residual_load,
         .f = mean,
         .before = 6,
         .complete = FALSE
       ),
+      residual_load_lag_ratio = residual_load_forecast_lag_1/residual_load_forecast_lag_24,
       wind_dir_sin = sin(wind_direction_80m * (pi / 180)),
       wind_dir_cos = cos(wind_direction_80m * (pi / 180)),
       temp_index = pmax(0, wet_bulb_temperature_2m - 22) +

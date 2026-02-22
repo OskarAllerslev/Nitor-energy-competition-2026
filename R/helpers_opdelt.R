@@ -87,7 +87,8 @@ xgb_opdelt_market <- function(
   MARKED = "Market A",
   sub_model_name = "",
   training_split,
-  wrks = 1
+  wrks = 1,
+  step = 5
 ) {
   # preopsætning----
   model_name <- glue::glue("xgb_", MARKED)
@@ -117,7 +118,7 @@ xgb_opdelt_market <- function(
     dials::min_n(range = c(15L, 100L)),
     dials::mtry(range = c(10L, 35L)),
     dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
-    size = 5
+    size = step
   )
 
   eval_metric <- yardstick::metric_set(yardstick::rmse)

@@ -13,21 +13,23 @@ testing_split <- rsample::testing(splits)
 # fit modeller ----
 wrks = 15
 
-tune_model <- function(MARKED = "A") {
+tune_model <- function(MARKED = "A", sub_model_name) {
   xgb_opdelt_market(
     MARKED = glue::glue("Market {MARKED}"),
-    sub_model_name = "xbg_opdelt",
+    sub_model_name = sub_model_name,
     training_split = training_split,
-    wrks =wrks
+    wrks =wrks,
+    step = 20
   )
 }
 
-xgb_best_params_A <- tune_model("A")
-xgb_best_params_B <- tune_model("B")
-xgb_best_params_C <- tune_model("C")
-xgb_best_params_D <- tune_model("D")
-xgb_best_params_E <- tune_model("E")
-xgb_best_params_F <- tune_model("F")
+sub_model_name <- "step20nyefeatures"
+xgb_best_params_A <- tune_model("A", sub_model_name)
+xgb_best_params_B <- tune_model("B", sub_model_name)
+xgb_best_params_C <- tune_model("C", sub_model_name)
+xgb_best_params_D <- tune_model("D", sub_model_name)
+xgb_best_params_E <- tune_model("E", sub_model_name)
+xgb_best_params_F <- tune_model("F", sub_model_name)
 
 #xgb_best_params_A <- readRDS()
 
@@ -105,4 +107,4 @@ predictions_E_full <- predict_on_market_model(data_for_prediction, "E", full_fit
 predictions_F_full <- predict_on_market_model(data_for_prediction, "F", full_fit_f, training_data)
 
 combined_predictions_full <- rbind(predictions_A_full, predictions_B_full, predictions_C_full, predictions_D_full, predictions_E_full, predictions_F_full) |> dplyr::arrange(id)
-combined_predictions_full |> extract_data_for_prediction() |> save_results("xgb_opdelt", "FirstAttemptAtSplitModel")
+combined_predictions_full |> extract_data_for_prediction() |> save_results("xgb_opdelt", "SplitModelSize5NewFeatures")
