@@ -1,4 +1,5 @@
-
+library(ggplot2)
+library(patchwork)
 
 plot_predictions <- function(preds, test_data, market_name) {
   plot_data <- preds |> extract_fit_subset(test_data)
