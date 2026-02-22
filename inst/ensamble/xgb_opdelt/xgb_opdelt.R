@@ -19,11 +19,11 @@ tune_model <- function(MARKED = "A", sub_model_name) {
     sub_model_name = sub_model_name,
     training_split = training_split,
     wrks =wrks,
-    step = 20
+    step = 50
   )
 }
 
-sub_model_name <- "andrefolds"
+sub_model_name <- "onebigfold"
 xgb_best_params_A <- tune_model("A", sub_model_name)
 xgb_best_params_B <- tune_model("B", sub_model_name)
 xgb_best_params_C <- tune_model("C", sub_model_name)
@@ -107,4 +107,4 @@ predictions_E_full <- predict_on_market_model(data_for_prediction, "E", full_fit
 predictions_F_full <- predict_on_market_model(data_for_prediction, "F", full_fit_f, training_data)
 
 combined_predictions_full <- rbind(predictions_A_full, predictions_B_full, predictions_C_full, predictions_D_full, predictions_E_full, predictions_F_full) |> dplyr::arrange(id)
-combined_predictions_full |> extract_data_for_prediction() |> save_results("xgb_opdelt", "andrefolds")
+combined_predictions_full |> extract_data_for_prediction() |> save_results("xgb_opdelt", "onebigfold")

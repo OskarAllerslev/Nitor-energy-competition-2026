@@ -100,15 +100,19 @@ xgb_opdelt_market <- function(
 
   # tune ----
 
-  folds <- rsample::sliding_period(
-    data = train_df,
-    index = delivery_start,
-    period = "day",
-    lookback = 365,
-    assess_stop = 30,
-    step = 30,
-    skip = 0
-  )
+  # folds <- rsample::sliding_period(
+  #   data = train_df,
+  #   index = delivery_start,
+  #   period = "day",
+  #   lookback = 365,
+  #   assess_stop = 30,
+  #   step = 30,
+  #   skip = 0
+  # )
+
+  split <- rsample::initial_time_split(train_df, prop = 73279/126803  )
+  folds <- rsample::manual_rset(list(split), ids = "Split1")
+
 
   xgb_wf <- workflow_helper(train_df)
 
