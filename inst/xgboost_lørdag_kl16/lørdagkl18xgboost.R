@@ -223,7 +223,7 @@ best_xgb_params <- tune::select_best(xgb_tune_res, metric = "rmse")
 save_object(best_params, model_name, prefix = glue::glue("best_params_{sub_model_name}"))
 save_object(best_xgb_params, model_name, prefix = glue::glue("best_xgb_params_{sub_model_name}"))
 
-#df <- readRDS("./inst/xgboost_lørdag_kl16/model/best_params_større_assessment_pitxgboost_lørdag_kl1621-02-2026 16-29-47.rds")
+df <- readRDS("./inst/xgboost_lørdag_kl16/model/best_params_større_assessment_pitxgboost_lørdag_kl1621-02-2026 16-29-47.rds")
 
 df <- best_params
 
@@ -257,7 +257,7 @@ fit_on_all <- fit_final_model_on_all_data(model = final_xgb_fit,
 
 fit_on_all <- fit_on_all |> dplyr::mutate(target = quantile(train_targets, probs = pnorm(target), na.rm=T))
 
-extract_fit_subset(fit_on_all, testing_split) |> yardstick::rmse(target.x, target.y)
+extract_fit_subset(fit_on_all, testing_split |> dplyr::filter(market == "Market A")) |> yardstick::rmse(target.x, target.y)
 extract_fit_subset(fit_on_all, training_split) |> yardstick::rmse(target.x, target.y)
 
 

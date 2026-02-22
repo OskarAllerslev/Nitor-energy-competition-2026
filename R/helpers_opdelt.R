@@ -162,3 +162,32 @@ xgb_opdelt_market <- function(
   return(best_params_final)
 }
 
+market_A_tweedie_model <- function(training_set) {
+  train_df_a <- training_set |> dplyr::filter(market == "Market A")
+
+  training_split_a <- train_df_a
+
+  #Cannot fit on negative data so we do this transform
+  offset_val <- abs(min(training_split_a$target, na.rm = TRUE)) + 1
+  training_split_a$target_shifted <- training_split_a$target + offset_val
+
+  glm_model <- glm(
+    target_shifted  ~ (solar_forecast * wind_forecast * load_forecast)^2 + wind_speed_80m + apparent_temperature_2m
+    + global_horizontal_irradiance^3 ,
+    family = statmod::tweedie(var.power = 1.9999, link.power = 0),
+    data = training_split_a
+  )
+
+  untransformed_data <- prepare_data_for_prediction(function(x) {x}) |>  dplyr::mutate(
+    dplyr::across(
+      dplyr::where(is.numeric), ~ tidyr::replace_na(.x, median(.x, na.rm = T))
+    )
+  )
+
+  preds <- predict(glm_model, newdata = untransformed_data, type = "response")
+
+  #Transform it back to negative
+  predictions_A <- untransformed_data |>  dplyr::mutate(target = preds -offset_val)
+}
+
+

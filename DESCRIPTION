@@ -40,4 +40,5 @@ Imports:
     bestNormalize,
     rules,
     rules,
-    Cubist
+    Cubist,
+    statmod
