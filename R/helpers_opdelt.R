@@ -104,18 +104,18 @@ xgb_opdelt_market <- function(
     data = train_df,
     index = delivery_start,
     period = "day",
-    lookback = 28,
-    assess_stop = 14,
-    step = 7,
+    lookback = 365,
+    assess_stop = 30,
+    step = 30,
     skip = 0
   )
 
   xgb_wf <- workflow_helper(train_df)
 
   xgb_hyper_space <- dials::grid_latin_hypercube(
-    dials::trees(range = c(1000L, 3000)),
-    dials::tree_depth(range = c(3L, 30L)),
-    dials::min_n(range = c(15L, 100L)),
+    dials::trees(range = c(200L, 3000)),
+    dials::tree_depth(range = c(3L, 10L)),
+    dials::min_n(range = c(5L, 40L)),
     dials::mtry(range = c(10L, 35L)),
     dials::learn_rate(range = c(-3, -1), trans = scales::log10_trans()),
     size = step
