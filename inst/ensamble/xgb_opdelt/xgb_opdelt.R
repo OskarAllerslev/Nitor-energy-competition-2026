@@ -80,6 +80,8 @@ data.frame(market= c("A","B","C","D","E","F"),
       predictions_F |> extract_fit_subset(testing_split) |> yardstick::rmse(target.x, target.y)))
 
 
+combined_predictions <- rbind(predictions_A, predictions_B, predictions_C, predictions_D, predictions_E, predictions_F)
+combined_predictions |> extract_fit_subset(testing_split) |> yardstick::rmse(target.x, target.y)
 
 
 
