@@ -133,6 +133,64 @@ data_transform_notargetadjust <- function(
   return(result)
 }
 
+final_data_transformation <- function(training_split) {
+  train_targets_mad <- stats::mad(training_split$target)
+  train_targets_median <- median(training_split$target)
+  function(df, modifyTarget = T) {
+  result <- df |>
+    #Fill out missing market rows to make sure lags take from the correct time and don't go more hours back than desired.
+    tidyr::complete(
+      market,
+      delivery_start = seq(
+        from = min(delivery_start, na.rm = TRUE),
+        to = max(delivery_start, na.rm = TRUE),
+        by = "hour"
+      )
+    ) |>
+    dplyr::group_by(market) |>
+    dplyr::arrange(market, delivery_start) |>
+    dplyr::mutate(
+      residual_load = load_forecast - solar_forecast - wind_forecast,
+      residual_load_forecast_lag_24 = dplyr::lag(residual_load, n = 24),
+      residual_load_ma_6h = slider::slide_dbl(
+        .x = residual_load,
+        .f = mean,
+        .before = 6,
+        .complete = FALSE
+      ),
+      wind_dir_sin = sin(wind_direction_80m * (pi / 180)),
+      wind_dir_cos = cos(wind_direction_80m * (pi / 180)),
+      temp_index = pmax(0, wet_bulb_temperature_2m - 22) +
+        pmax(0, 18 - air_temperature_2m)
+    ) |>
+    dplyr::select(
+      -c(
+        wind_direction_80m,
+        cloud_cover_low,
+        cloud_cover_mid,
+        cloud_cover_high,
+        dew_point_temperature_2m,
+        wet_bulb_temperature_2m,
+        relative_humidity_2m,
+        wind_gust_speed_10m,
+        convective_inhibition,
+        lifted_index
+      )
+    )
+
+  if (modifyTarget) {
+    result <- result |> dplyr::mutate(target = asinh((target - train_targets_median) / train_targets_mad))
+  }
+  result <- result |>
+    dplyr::arrange(id, delivery_start) |>
+    dplyr::ungroup()
+  result <- result |>
+    dplyr::filter(!is.na(id))
+
+  return(result)
+}
+}
+
 
 
 

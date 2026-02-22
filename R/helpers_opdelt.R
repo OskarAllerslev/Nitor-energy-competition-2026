@@ -1,3 +1,8 @@
+get_train_df <- function (MARKED = "Market A", training_split) {
+  split <- training_split |> dplyr::filter(market == MARKED)
+  final_data_transformation(split)(split)
+}
+
 
 workflow_helper <- function(
   train_df
@@ -73,7 +78,7 @@ finalize_workflow_helper <- function(
   xgb_wf_final <- workflow |>
     tune::finalize_workflow(best_params)
 
-  res <- final_xgb_fit <- xgb_wf |>
+  res <- final_xgb_fit <- xgb_wf_final |>
     parsnip::fit(data = train_df)
   return(res)
 }
@@ -87,74 +92,9 @@ xgb_opdelt_market <- function(
   # preopsætning----
   model_name <- glue::glue("xgb_", MARKED)
   # opsætning af data ----
-  training_split <- training_split |> dplyr::filter(market == MARKED)
-  train_targets <- training_split$target
 
-  inv_prediction_trans <- function(x) {
-    quantile(train_targets, probs = pnorm(x), na.rm = TRUE)
-  }
+  train_df <- get_train_df(MARKED = MARKED, training_split = training_split)
 
-  data_transformation_to_use <- function(df, modifyTarget = T) {
-    result <- df |>
-      #Fill out missing market rows to make sure lags take from the correct time and don't go more hours back than desired.
-      tidyr::complete(
-        market,
-        delivery_start = seq(
-          from = min(delivery_start, na.rm = TRUE),
-          to = max(delivery_start, na.rm = TRUE),
-          by = "hour"
-        )
-      ) |>
-      dplyr::group_by(market) |>
-      dplyr::arrange(market, delivery_start) |>
-      dplyr::mutate(
-        residual_load = load_forecast - solar_forecast - wind_forecast,
-        residual_load_forecast_lag_24 = dplyr::lag(residual_load, n = 24),
-        residual_load_ma_6h = slider::slide_dbl(
-          .x = residual_load,
-          .f = mean,
-          .before = 6,
-          .complete = FALSE
-        ),
-        wind_dir_sin = sin(wind_direction_80m * (pi / 180)),
-        wind_dir_cos = cos(wind_direction_80m * (pi / 180)),
-        temp_index = pmax(0, wet_bulb_temperature_2m - 22) +
-          pmax(0, 18 - air_temperature_2m)
-      ) |>
-      dplyr::select(
-        -c(
-          wind_direction_80m,
-          cloud_cover_low,
-          cloud_cover_mid,
-          cloud_cover_high,
-          dew_point_temperature_2m,
-          wet_bulb_temperature_2m,
-          relative_humidity_2m,
-          wind_gust_speed_10m,
-          convective_inhibition,
-          lifted_index
-        )
-      )
-
-    if (modifyTarget) {
-      the_ecdf <- ecdf(train_targets)
-      bounded_ecdf <- function(x) {
-        p <- the_ecdf(x)
-        pmin(pmax(p, 1e-4), 1 - 1e-4)
-      }
-
-      result <- result |> dplyr::mutate(target = qnorm(bounded_ecdf(target)))
-    }
-    result <- result |>
-      dplyr::arrange(id, delivery_start) |>
-      dplyr::ungroup()
-    result <- result |>
-      dplyr::filter(!is.na(id))
-
-    return(result)
-  }
-  train_df <- training_split |>
-    data_transformation_to_use()
   # recipie ----
 
   # tune ----
@@ -164,15 +104,12 @@ xgb_opdelt_market <- function(
     index = delivery_start,
     period = "day",
     lookback = 28,
-    assess_stop = 1,
-    step = 3,
+    assess_stop = 14,
+    step = 7,
     skip = 0
   )
 
   xgb_wf <- workflow_helper(train_df)
-  # xgb_wf <- workflows::workflow() |>
-  #   workflows::add_recipe(initial_recipe) |>
-  #   workflows::add_model(xgb_spec)
 
   xgb_hyper_space <- dials::grid_latin_hypercube(
     dials::trees(range = c(1000L, 3000)),
@@ -191,6 +128,7 @@ xgb_opdelt_market <- function(
     allow_par = T
   )
 
+  print("Starting tuning")
   set.seed(1)
   # options(future.globals.maxSize = Inf)
   start.time <- Sys.time()
@@ -209,6 +147,9 @@ xgb_opdelt_market <- function(
   time.taken <- end.time - start.time
   time.taken
   best_params_final <- tune::select_best(xgb_tune_res, metric = "rmse")
+
+  save_object(best_params_final, model_name, prefix = glue::glue("best_params_{sub_model_name}"))
+
   return(best_params_final)
 }
 
