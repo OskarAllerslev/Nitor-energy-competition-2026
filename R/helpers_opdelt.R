@@ -109,8 +109,10 @@ xgb_opdelt_market <- function(
   #   step = 30,
   #   skip = 0
   # )
+  x1 <- nrow(train_df |> dplyr::filter(delivery_start < "2024-10-01"))
+  x2 <- nrow(train_df)
 
-  split <- rsample::initial_time_split(train_df, prop = (73279-32745)/(126803-32745)  )
+  split <- rsample::initial_time_split(train_df, prop = x1/x2 )
   folds <- rsample::manual_rset(list(split), ids = "Split1")
 
 

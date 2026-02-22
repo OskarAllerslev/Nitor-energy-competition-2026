@@ -1,19 +1,19 @@
 
-training_data <- load_full_dataset() |> dplyr::filter(delivery_start >= "2023-10-01")
+training_data <- load_full_dataset()
 
 set.seed(1)
 splits <- rsample::initial_time_split(
   data = training_data,
   prop = 0.95
 )
-training_split <- rsample::training(splits)
+training_split <- rsample::training(splits) |> dplyr::filter(delivery_start >= "2023-10-01")
 testing_split <- rsample::testing(splits)
 
 
 # fit modeller ----
 wrks = 15
 
-tune_model <- function(MARKED = "A", sub_model_name) {
+tune_model <- function(MARKED = "A", sub_model_name, training_split) {
   xgb_opdelt_market(
     MARKED = glue::glue("Market {MARKED}"),
     sub_model_name = sub_model_name,
@@ -23,13 +23,14 @@ tune_model <- function(MARKED = "A", sub_model_name) {
   )
 }
 
-sub_model_name <- "onebigfoldfirstperiodremoved"
-xgb_best_params_A <- tune_model("A", sub_model_name)
-xgb_best_params_B <- tune_model("B", sub_model_name)
-xgb_best_params_C <- tune_model("C", sub_model_name)
-xgb_best_params_D <- tune_model("D", sub_model_name)
-xgb_best_params_E <- tune_model("E", sub_model_name)
-xgb_best_params_F <- tune_model("F", sub_model_name)
+sub_model_name <- "onebigfoldfirstperiodremoveddoneproperly"
+xgb_best_params_A <- tune_model("A", sub_model_name, training_split)
+# xgb_best_params_A <- tune_model("A", sub_model_name, )
+xgb_best_params_B <- tune_model("B", sub_model_name, training_split)
+xgb_best_params_C <- tune_model("C", sub_model_name, training_split)
+xgb_best_params_D <- tune_model("D", sub_model_name, training_split)
+xgb_best_params_E <- tune_model("E", sub_model_name, training_split)
+xgb_best_params_F <- tune_model("F", sub_model_name, training_split)
 
 #xgb_best_params_A <- readRDS()
 
