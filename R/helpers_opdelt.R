@@ -110,7 +110,7 @@ xgb_opdelt_market <- function(
   #   skip = 0
   # )
 
-  split <- rsample::initial_time_split(train_df, prop = 73279/126803  )
+  split <- rsample::initial_time_split(train_df, prop = (73279-32745)/(126803-32745)  )
   folds <- rsample::manual_rset(list(split), ids = "Split1")
 
 
